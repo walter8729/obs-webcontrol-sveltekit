@@ -58,6 +58,11 @@
         connected = false;
     }
 
+    // OBS events
+    obs.on("ConnectionClosed", () => {
+        connected = false;
+        console.log("Connection closed");
+    });
 
     //////////////funciones de zocalo
 </script>
@@ -65,18 +70,9 @@
 {#if logged}
     <Login bind:logged />
 {:else}
-    <!-- Sidebar -->
-            <!-- <nav id="sidebarMenu" class="collapse d-lg-block sidebar collapse bg-white">
-                <div class="position-sticky">
-                <div class="list-group list-group-flush mx-3 mt-4">
-        
-                </div>
-                </div>
-            </nav> -->
-      <!-- Sidebar -->
-    <div class="container p-2">
-        <div class="row">
-            <div class="col-md-4 px-1 ">
+    <div class="container-fluid pt-2">
+        <div class="row justify-content-start">
+            <div class="col-md-4 m-0">
                 {#if !connected}
                     <div class="card bg-dark mt-1">
                         <div class="card-header text-white">
@@ -84,7 +80,7 @@
                         </div>
                         <div class="card-body">
                             <span class="text-white">Obs No esta Abierto</span>
-                            <button> CONECTAR</button>
+                            <button on:click={connect}> CONECTAR</button>
                         </div>
                     </div>
                 {:else if previewScene}
@@ -103,12 +99,15 @@
                 {/if}
 
                 {#if connected && !previewScene}
-                    <!-- ****CARD TITULO Y SCENAS**** -->
+                    <!-- ****PREVIEW**** -->
                     <div class="card bg-dark mt-1">
-                        <div class="card-header text-danger">
-                            <h1>PROGRAMA ACTUAL: {programScene}</h1>
+                        <div class="card-body">
+                            <Preview {programScene} />
                         </div>
+                    </div>
 
+                    <!-- ****CARD SCENAS**** -->
+                    <div class="card bg-dark mt-1">
                         <div class="card-body">
                             <!-- ****DROPDOWN DE SCENAS**** -->
                             <SceneSelector
@@ -119,23 +118,14 @@
                         </div>
                     </div>
 
-                    <!-- ****PREVIEW**** -->
-
-                    <Preview {programScene} />
-
                     <!-- ****BOTONES DE ITEMS**** -->
                     <SceneItemSelector />
                 {/if}
             </div>
 
-            <div class="col-md-8" >
-                <Zocalos/>                    
+            <div class="col-md-8">
+                <Zocalos />
             </div>
         </div>
     </div>
 {/if}
-
-
-
-  
-  

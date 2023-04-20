@@ -1,11 +1,17 @@
 <script>
     import { onMount } from "svelte";
-    import { slide, fade, fly, blur} from 'svelte/transition';
+    import { slide, fade, fly, blur } from "svelte/transition";
+    import InfoPill from "./InfoPill.svelte";
 
     $: zocalos = [];
     let f1 = "";
     let f2 = "";
     let f3 = "";
+    let infoPillData = { type: "info", text: "Info" };
+    let f1Lenght = 60;
+    let f2Lenght = 70;
+    let f3Lenght = 65;
+
     $: onEdit = 0;
     $: zocaloDinamicoOnEdit = false;
     $: resetAddForm();
@@ -15,6 +21,12 @@
     function resetAddForm() {
         f1 = "";
         f2 = "";
+    }
+    function showInfo(data) {
+        infoPillData = data;
+        setTimeout(() => {
+            infoPillData = { type: "info", text: "Info" };
+        }, 10000);
     }
     async function getAllZocalos() {
         try {
@@ -42,6 +54,7 @@
     }
     async function addZocalo(f1, f2) {
         resetAddForm();
+
         try {
             let apiUrl = apiAddress + "?set=addZocalo";
             f1 = f1.toUpperCase();
@@ -64,10 +77,18 @@
                 }),
             })
                 .then((res) => res.json())
-                .then((data) => console.log(data));
-                await getAllZocalos();
-                console.log(fromApi);
-                alert("Zocalo Agregado");
+                .then(
+                    showInfo({
+                        type: "info",
+                        text:
+                            "AGREGASTE UN NUEVO ZOCALO N°: " +
+                            (zocalos.length + 1) +
+                            " - " +
+                            f1 +
+                            " - " +
+                            f2,
+                    })
+                );
         } catch (error) {
             console.log(error);
         }
@@ -88,10 +109,23 @@
                     },
                     // mode: "no-cors",
                     body: JSON.stringify({ id: zocalo.id }),
-                }).then((res) => res.json());
+                })
+                    .then((res) => res.json())
+                    .then(
+                        showInfo({
+                            type: "danger",
+                            text:
+                                "ELIMINASTE EL ZOCALO N°: " +
+                                (zocalos.indexOf(zocalo) + 1) +
+                                " - " +
+                                zocalo.f1 +
+                                " - " +
+                                zocalo.f2,
+                        })
+                    );
 
                 getAllZocalos();
-                alert("Zocalo Eliminado: \n" + zocalo.f1 + " " + zocalo.f2);
+                // alert("Zocalo Eliminado: \n" + zocalo.f1 + " " + zocalo.f2);
             } else {
                 alert("No se puede eliminar un zocalo cuando esta en uso");
             }
@@ -103,15 +137,13 @@
         try {
             let apiUrl = apiAddress + "?set=updateZocalo";
             //console.log("La url de la api es: ", apiUrl);
+
             let f1 = document
                 .getElementById("f1text" + zocalo.id)
                 .value.toUpperCase();
             let f2 = document
                 .getElementById("f2text" + zocalo.id)
                 .value.toUpperCase();
-
-            let onAir;
-
             let fromApi = await fetch(apiUrl, {
                 method: "PUT",
                 headers: {
@@ -128,14 +160,26 @@
                     f2,
                     onAir: zocalo.onAir,
                 }),
-            }).then((res) => res.json());
+            })
+                .then((res) => res.json())
+                .then(
+                    showInfo({
+                        type: "primary",
+                        text:
+                            "ACTUALIZASTE EL ZOCALO N°: " +
+                            (zocalos.indexOf(zocalo) + 1) +
+                            " - " +
+                            f1 +
+                            " - " +
+                            f2,
+                    })
+                );
 
             // console.log(fromApi);
 
             await getAllZocalos();
             await writeZocaloToFile(zocalos);
             onEdit = 0;
-            alert("Zocalo Actualizado");
         } catch (error) {
             console.log(error);
         }
@@ -155,7 +199,19 @@
                 },
                 // mode: "no-cors",
                 body: JSON.stringify(id),
-            }).then((res) => res.json());
+            }).then((res) =>
+                res.json().then(
+                    showInfo({
+                        type: "success",
+                        text:
+                            "AL AIRE EL ZOCALO N°: " +
+                            (zocalos.indexOf(
+                                zocalos.find((zocalo) => zocalo.id == id)
+                            ) +
+                                1),
+                    })
+                )
+            );
 
             console.log("set on air return: ", fromApi);
             await getAllZocalos();
@@ -204,7 +260,17 @@
             })
                 .then((res) => res.json())
                 .then(getZocaloDinamicoFromFile())
-                .then(alert("Zocalo Auxiliar Actualizado"));
+                .then(
+                    showInfo({
+                        type: "success",
+                        text: "ACTUALIZASTE EL ZOCALO AUXILIAR: " + f3,
+                    })
+                );
+
+            console.log(
+                "respuesta desde write Zocalo Dinamico to file",
+                fromApi
+            );
         } catch (error) {
             console.log(error);
         }
@@ -224,155 +290,281 @@
 
 <!-- ****ZOCALOS**** -->
 <!-- ****ZOCALO DINAMICO**** -->
-<div class="card bg-dark mt-1">
-    <div class="card-header text-white">ZOCALO AUXILIAR</div>
-    <div class="card-body">
-        <form action="" method="post" class="row gy-2 gx-2 align-items-center">
-            <div class="col-8">
-                <!-- svelte-ignore a11y-autofocus -->
-                <input
-                    id="f3text"
-                    class="form-control"
-                    type="text"
-                    bind:value={f3}
-                    on:input={() => (zocaloDinamicoOnEdit = true)}
-                    maxlength="85"
-                    autofocus
-                />
-            </div>
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <div class="card bg-secondary mt-1">
+                <div class="card-header text-white">
+                    <h1>ZOCALO AUXILIAR</h1>
+                </div>
 
-            <div class="col-auto">
-                <button
-                    class="btn btn-outline-primary btn-md"
-                    disabled={!zocaloDinamicoOnEdit}
-                    on:click|preventDefault={writeZocaloDinamicoToFile}
+                <form
+                    action=""
+                    method="post"
+                    class="row mb-1 gy-1 gx-1 align-items-center"
                 >
-                    ACTUALIZAR
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
+                    <div class="col-auto">
+                        <span class="badge badge-light">00</span>
+                    </div>
+                    <div class="col-7">
+                        <!-- svelte-ignore a11y-autofocus -->
+                        <input
+                            id="f3text"
+                            class="form-control form-control-sm"
+                            type="text"
+                            bind:value={f3}
+                            on:input={() => (zocaloDinamicoOnEdit = true)}
+                            maxlength={f3Lenght}
+                            autofocus
+                        />
+                    </div>
 
-<!-- ****LISTA DE ZOCALOS**** -->
-<div class="card bg-dark mt-1">
-    <div
-        class="card-header text-white justify-content-between align-items-center"
-    >
-        <form action="" method="post" class="row gy-2 gx-2 align-items-center">
-            <h3>AGREGAR NUEVOS ZOCALOS</h3>
-            <div class="col-5">
-                <!-- svelte-ignore a11y-autofocus -->
-                <input 
-                    class="form-control"
-                    type="text"
-                    bind:value={f1}
-                    maxlength="60"
-                    autofocus
-                />
-            </div>
-
-            <div class="col-5">
-                <input
-                    class="form-control"
-                    type="text"
-                    bind:value={f2}
-                    maxlength="70"
-                />
-            </div>
-
-            <div class="col-auto">
-                <button
-                    class="btn btn-info"
-                    on:click|preventDefault={addZocalo(f1, f2)}
-                >
-                    Guardar
-                </button>
-            </div>
-        </form>
-    </div>
-
-    <table class="table table-striped table-dark">
-        <thead>
-            <tr>
-                <th>Index</th>
-                <th>Zocalos</th>
-                <!-- <th>Activo</th> -->
-            </tr>
-        </thead>
-        <tbody>
-            {#each zocalos as zocalo, i}
-                <tr >
-                    <td>{i + 1}</td>
-                    <td>
-                        <form 
-                            class="row gy-2 gx-2 align-items-center"
-                            id="form{zocalo.id}"
+                    <div class="col-1">
+                        <button
+                            class="btn btn-info btn-sm"
+                            disabled={!zocaloDinamicoOnEdit}
+                            on:click|preventDefault={writeZocaloDinamicoToFile}
                         >
-                            <div class="col-4">
-                                <input
-                                    id="f1text{zocalo.id}"
-                                    on:input={() => (onEdit = zocalo.id)}
-                                    class="form-control"
-                                    type="text"
-                                    name="f1"
-                                    value={zocalo.f1}
-                                    maxlength="60"
-                                />
-                            </div>
-                            <div class="col-4">
-                                <input
-                                    id="f2text{zocalo.id}"
-                                    on:input={() => (onEdit = zocalo.id)}
-                                    class="form-control"
-                                    type="text"
-                                    name="f2"
-                                    value={zocalo.f2}
-                                    maxlength="70"
-                                />
-                            </div>
+                            ACTUALIZAR
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-12">
+        <!-- ****LISTA DE ZOCALOS**** -->
+        <div class="card bg-dark mt-1">
+            <div class="card-header text-white">
+                <h1>AGREGAR NUEVO ZOCALO</h1>
+            </div>
 
-                            <div class="col-auto">
-                                <button
-                                    class="btn btn-danger"
-                                    disabled={zocalo.onAir}
-                                    on:click|preventDefault={deleteZocalo(
-                                        zocalo
-                                    )}
-                                >
-                                    ╳
-                                </button>
-                            </div>
+            <form
+                action=""
+                method="post"
+                class="row gb-1 gx-1 align-items-center mb-2"
+            >
+                <div class="col-auto">
+                    <span class="badge badge-light">{zocalos.length + 1}</span>
+                </div>
+                <div class="col-5">
+                    <!-- svelte-ignore a11y-autofocus -->
+                    <input
+                        class="form-control form-control-sm"
+                        type="text"
+                        bind:value={f1}
+                        maxlength={f1Lenght}
+                        autofocus
+                    />
+                </div>
 
-                            <div class="col-auto">
-                                <button
-                                    type="submit"
-                                    class="btn btn-primary"
-                                    hidden={zocalo.id === onEdit ? false : true}
-                                    on:click|preventDefault={updateZocalo(
-                                        zocalo
-                                    )}
-                                >
-                                    ✓
-                                </button>
-                            </div>
-                            <div class="col-auto">
-                                <button
-                                    on:click|preventDefault={setOnAirZocalo(
-                                        zocalo.id
-                                    )}
-                                    class={zocalo.onAir
-                                        ? "btn btn-danger "
-                                        : "btn btn-success"}
-                                    disabled={zocalo.onAir}
-                                >
-                                    {zocalo.onAir ? "ON AIR" : "USAR"}
-                                </button>
-                            </div>
-                        </form>
-                    </td>
-                </tr>
-            {/each}
-        </tbody>
-    </table>
+                <div class="col-5">
+                    <input
+                        class="form-control form-control-sm"
+                        type="text"
+                        bind:value={f2}
+                        maxlength={f2Lenght}
+                    />
+                </div>
+
+                <div class="col-auto">
+                    <button
+                        class="btn btn-info btn-sm"
+                        on:click|preventDefault={addZocalo(f1, f2)}
+                    >
+                        AGREGAR
+                    </button>
+                </div>
+            </form>
+
+            <!-- <div class="table-responsive-sm">
+                <table class="table  table-striped table-dark table-sm">
+                    <thead>
+                        <tr>
+                            <th>N°</th>
+                            <th>Zocalos</th>
+                            
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each zocalos as zocalo, i}
+                            <tr>
+                                <td class="col-1">{i + 1}</td>
+                                <td>
+                                    <form
+                                        class="row gy-1 gx-1 align-items-left"
+                                        id="form{zocalo.id}"
+                                    >
+                                        <div class="col-5">
+                                            <input
+                                                id="f1text{zocalo.id}"
+                                                on:input={() => (onEdit = zocalo.id)}
+                                                class="form-control form-control-sm"
+                                                type="text"
+                                                name="f1"
+                                                value={zocalo.f1}
+                                                maxlength="60"
+                                            />
+            
+                                        </div>
+                                        <div class="col-5">
+                                            <input
+                                                id="f2text{zocalo.id}"
+                                                on:input={() => (onEdit = zocalo.id)}
+                                                class="form-control form-control-sm"
+                                                type="text"
+                                                name="f2"
+                                                value={zocalo.f2}
+                                                maxlength="70"
+                                            />
+                                        </div>
+            
+                                        <div class="col-auto">
+                                            <button
+                                                title="Eliminar"
+                                                class="btn btn-danger btn-sm"
+                                                disabled={zocalo.onAir}
+                                                on:click|preventDefault={deleteZocalo(
+                                                    zocalo
+                                                )}
+                                            >
+                                                🗑
+                                            </button>
+                                        </div>
+            
+                                        <div class="col-auto">
+                                            <button
+                                            title="Guardar las modificaciones"
+                                                type="submit"
+                                                class="btn btn-primary btn-sm"
+                                                hidden={zocalo.id === onEdit ? false : true}
+                                                on:click|preventDefault={updateZocalo(
+                                                    zocalo
+                                                )}
+                                            >
+                                                ✓
+                                            </button>
+                                        </div>
+                                        <div class="col-auto">
+                                            <button
+                                            title="Usar este Zocalo"
+                                                on:click|preventDefault={setOnAirZocalo(
+                                                    zocalo.id
+                                                )}
+                                                class={zocalo.onAir
+                                                    ? "btn btn-danger btn-sm active"
+                                                    : "btn btn-success btn-sm"}
+                                                disabled={zocalo.onAir}
+                                            >
+                                                {zocalo.onAir ? "ON AIR" : "USAR"}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div> -->
+
+            <div class="card-header text-white">
+                <h1>
+                    LISTA DE ZOCALOS
+                    <InfoPill {infoPillData} />
+                </h1>
+            </div>
+            <div>
+                {#each zocalos as zocalo, i}
+                    <form
+                        class="row gy-1 gx-1 align-items-center mb-1"
+                        id="form{zocalo.id}"
+                    >
+                        <div class="col-auto">
+                            <span
+                                class="badge badge-light {zocalo.onAir
+                                    ? 'text-danger bg-white'
+                                    : 'text-white'}"
+                                >{i + 1 < 10 ? "0" : ""}{i + 1}</span
+                            >
+                        </div>
+                        <div class="col-5">
+                            <input
+                                id="f1text{zocalo.id}"
+                                on:input={() => (onEdit = zocalo.id)}
+                                on:keypress={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        updateZocalo(zocalo);
+                                    }
+                                }}
+                                class="form-control form-control-sm"
+                                type="text"
+                                name="f1"
+                                value={zocalo.f1}
+                                maxlength={f1Lenght}
+                            />
+                        </div>
+                        <div class="col-5">
+                            <input
+                                id="f2text{zocalo.id}"
+                                on:input={() => (onEdit = zocalo.id)}
+                                on:keypress={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        updateZocalo(zocalo);
+                                    }
+                                }}
+                                class="form-control form-control-sm"
+                                type="text"
+                                name="f2"
+                                value={zocalo.f2}
+                                maxlength={f2Lenght}
+                            />
+                        </div>
+                        <div
+                            class="btn-group col-auto justify-content-center"
+                            role="group"
+                        >
+                            <button
+                                title="Eliminar"
+                                class="btn btn-danger btn-sm"
+                                disabled={zocalo.onAir}
+                                hidden={zocalo.id === onEdit ? true : false}
+                                on:click|preventDefault={deleteZocalo(zocalo)}
+                            >
+                                🗑
+                            </button>
+                            <button
+                                title="Guardar las modificaciones"
+                                type="submit"
+                                class="btn btn-primary btn-sm"
+                                hidden={zocalo.id === onEdit ? false : true}
+                                on:click|preventDefault={updateZocalo(zocalo)}
+                            >
+                                ✓
+                            </button>
+
+                            <button
+                                title="Usar este Zocalo"
+                                on:click|preventDefault={setOnAirZocalo(
+                                    zocalo.id
+                                )}
+                                class={zocalo.onAir
+                                    ? "btn btn-danger btn-sm"
+                                    : "btn btn-success btn-sm"}
+                                disabled={zocalo.onAir && false}
+                            >
+                                {zocalo.onAir ? "AIRE" : "USAR"}
+                                <span
+                                    class={zocalo.onAir && zocalo.id
+                                        ? "spinner-grow spinner-grow-sm"
+                                        : ""}
+                                />
+                            </button>
+                        </div>
+                    </form>
+                {/each}
+            </div>
+        </div>
+    </div>
 </div>

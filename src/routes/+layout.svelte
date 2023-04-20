@@ -10,6 +10,7 @@
       timeStyle: "full",
     }).format(new Date()).toLocaleUpperCase();
   }, 1000);
+
 </script>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark pb-md-2 sticky-top">

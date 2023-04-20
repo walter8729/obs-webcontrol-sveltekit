@@ -1,7 +1,7 @@
 <script>
     import { obs, sendCommand } from "../obs";
     import { onMount } from "svelte";
-    import {switchOffAllSceneItem} from "./SceneItemSelector.svelte"
+    import { switchOffAllSceneItem } from "./SceneItemSelector.svelte";
     export let scenes;
     export let programScene;
     export let previewScene;
@@ -43,49 +43,42 @@
     obs.on("SceneListChanged", async (data) => {
         console.log("SceneListChanged", data.scenes.length);
         await getSceneList();
-
     });
 
     obs.on("SceneCreated", async (data) => {
         console.log("SceneCreated", data);
         await getSceneList();
-
     });
 
     obs.on("SceneRemoved", async (data) => {
         console.log("SceneRemoved", data);
         await getSceneList();
-
     });
 
     obs.on("SceneNameChanged", async (data) => {
         console.log("SceneNameChanged", data);
         await getSceneList();
-
     });
 
     obs.on("CurrentProgramSceneChanged", async (data) => {
         console.log("CurrentProgramSceneChanged", data);
         await getSceneList();
-
     });
 
     obs.on("CurrentPreviewSceneChanged", async (data) => {
         console.log("CurrentPreviewSceneChanged", data);
         await getSceneList();
-
     });
 
     onMount(async function () {
-       await getSceneList();
+        await getSceneList();
     });
-
 </script>
 
 <!-- ****DROPDOWN DE SCENAS**** -->
-<div class="dropdown d-grid gap-2">
+<!-- <div class="dropdown d-grid gap-2">
     <button
-        class="btn btn-outline-info dropdown-toggle"
+        class="btn btn-outline-info btn-sm dropdown-toggle"
         type="button"
         id="dropdownMenuButton2"
         data-bs-toggle="dropdown"
@@ -110,6 +103,30 @@
 
         <li><hr class="dropdown-divider" /></li>
     </ul>
+</div> -->
+
+<div class="btn-group d-grid">
+    <button
+        class="btn btn-secondary dropdown-toggle"
+        type="button"
+        id="programas"
+        data-bs-toggle="dropdown"
+        aria-expanded="false"
+    >
+        {programScene}
+    </button>
+    <div class="dropdown-menu dropdown-menu-dark" aria-labelledby="programas">
+        {#each scenes as scene}
+            <div class="dropdown-item btn-group-vertical">
+                <button
+                    class="{scene.sceneName === programScene
+                        ? 'btn btn-danger'
+                        : ' btn btn-info'}  btn-sm"
+                    on:click={switchScene(scene.sceneName)}
+                >
+                    {scene.sceneName}
+                </button>
+            </div>
+        {/each}
+    </div>
 </div>
-
-

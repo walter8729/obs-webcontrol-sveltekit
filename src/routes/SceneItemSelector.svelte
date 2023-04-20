@@ -1,6 +1,5 @@
 <script context="module">
     export async function switchOffAllSceneItem(sceneName) {
-        
         console.log("todo off");
 
         let data = await sendCommand("GetSceneItemList", { sceneName });
@@ -23,7 +22,7 @@
 <script>
     import { obs, sendCommand } from "../obs";
     import { onMount } from "svelte";
-    import { slide } from 'svelte/transition';
+    import { slide } from "svelte/transition";
 
     export let programScene;
 
@@ -41,8 +40,11 @@
             });
             //guardamos la lista invertida
             programSceneItemList = data.sceneItems.slice().reverse();
-            
-            console.log('estos son los items del program actual ', programSceneItemList);
+
+            console.log(
+                "estos son los items del program actual ",
+                programSceneItemList
+            );
         } catch (e) {
             console.log(e);
         }
@@ -60,8 +62,6 @@
             console.log(error);
         }
     }
-
-
 
     obs.on("SceneListChanged", async (data) => {
         console.log("SceneListChanged", data);
@@ -111,7 +111,6 @@
     obs.on("CurrentProgramSceneChanged", async (data) => {
         console.log("CurrentProgramSceneChanged", data);
         await getSceneItemList();
-        
     });
 
     obs.on("CurrentPreviewSceneChanged", async (data) => {
@@ -125,16 +124,18 @@
 </script>
 
 <div class="card bg-dark mt-1">
-    <div class="card-header text-white">Gráficos del Programa</div>
+    <div class="card-header text-white d-flex justify-content-center">
+        ITEMS GRAFICOS DEL LA SELECCION
+    </div>
     <div class="card-body d-grid gap-2 align-items-center">
         <div class="btn-group-vertical">
             <button
-                class="btn-warning mb-2"
-                on:click={switchOffAllSceneItem(programScene)}
-                >APAGAR TODO</button
-            >
+            class="btn btn-bg btn-warning mb-2 "
+            on:click={switchOffAllSceneItem(programScene)}>APAGAR TODOS LOS GRAFICOS</button
+        >
+
             {#each programSceneItemList as item}
-                <button transition:slide
+                <button
                     class="{item.sceneItemEnabled
                         ? 'btn btn-success'
                         : 'btn btn-outline-light'} btn-bg"

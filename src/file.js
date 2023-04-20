@@ -28,10 +28,10 @@ export async function readZocaloDinamicoFromFile() {
 
 export async function writeZocaloToFile(zocalos) {
 
-   let zocalo = zocalos.find((zocalo) => zocalo.onAir == true);
+    let zocalo = zocalos.find((zocalo) => zocalo.onAir == true);
     // console.log(zocalo);
 
-    if(zocalo){
+    if (zocalo) {
         writeFile('src/f1.txt', zocalo.f1, (err, data) => {
             try {
                 console.log("Se escribio f1:", zocalo.f1);
@@ -41,11 +41,13 @@ export async function writeZocaloToFile(zocalos) {
         });
         writeFile('src/f2.txt', zocalo.f2, (err, data) => {
             try {
+
                 console.log("Se escribio f2:", zocalo.f2);
             } catch {
                 return err;
             }
         });
+        return zocalo;
     }
 
 };
@@ -58,6 +60,7 @@ export async function writeZocaloDinamicoToFile(textoDinamico) {
             return err;
         }
     });
+    return { f3: textoDinamico }
 
 };
 
