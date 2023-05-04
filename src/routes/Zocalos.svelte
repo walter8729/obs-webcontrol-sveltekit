@@ -1,44 +1,70 @@
 <script>
     import { onMount } from "svelte";
-    import { slide, fade, fly, blur } from "svelte/transition";
     import InfoPill from "./InfoPill.svelte";
 
+    //zocalos variables
     $: zocalos = [];
     let f1 = "";
     let f2 = "";
     let f3 = "";
-    let infoPillData = { type: "info", text: "Info" };
+
+    //Info pill variables
+    export let infoPillData = { type: "info", text: "" };
+    export let infoPillDataTimeOut;
+
+    // zocalos form variables
     let f1Lenght = 60;
     let f2Lenght = 70;
     let f3Lenght = 65;
 
+    //numero de id del  zocalo siendo editado, por default 0
     $: onEdit = 0;
+
+    //si esque se esta editando el zocalo dinamico
     $: zocaloDinamicoOnEdit = false;
+
+    //reset formulario de agregar nuevo zocalo
     $: resetAddForm();
 
     let apiAddress = `http://192.168.1.154:5173/api/zocalos`;
 
+    //reseteo de binds de formulario de agregar zocalo
     function resetAddForm() {
         f1 = "";
         f2 = "";
     }
-    function showInfo(data) {
+    //info del ultimo cambio que se realizo, para evitar usar confirm y alerts
+    async function showInfo(data) {
+        //si hay una info lo resetea
+        if (infoPillData.text !== "") {
+            resetShowInfo();
+        }
+        //luego mostramos info.
         infoPillData = data;
-        setTimeout(() => {
-            infoPillData = { type: "info", text: "Info" };
-        }, 10000);
+        infoPillDataTimeOut = setTimeout(() => {
+            infoPillData = { type: "info", text: "" };
+        }, 5000);
     }
+
+    //funcion que resetea el show info, y rompe el setTimeOut
+    async function resetShowInfo() {
+        infoPillData = { type: "info", text: "" };
+        clearTimeout(infoPillDataTimeOut);
+    }
+    //Pedimos al api la lista completa de zocalos
     async function getAllZocalos() {
         try {
             let apiUrl = apiAddress + "?get=getAllZocalos";
             //console.log("La url de la api es: ", apiUrl);
             let fromApi = await fetch(apiUrl).then((res) => res.json());
+            //declaracion reactiva de svelte
             zocalos = [...fromApi];
-            // console.log("getAllZocalos: \n", zocalos);
+            console.log("getAllZocalos: \n", zocalos);
         } catch (error) {
             console.log(error);
         }
     }
+    //Pedimos al api el txt dinamico en fichero esta no la lee de DB.
     async function getZocaloDinamicoFromFile() {
         try {
             let apiUrl = apiAddress + "?get=getZocaloDinamicoFromFile";
@@ -54,7 +80,6 @@
     }
     async function addZocalo(f1, f2) {
         resetAddForm();
-
         try {
             let apiUrl = apiAddress + "?set=addZocalo";
             f1 = f1.toUpperCase();
@@ -77,6 +102,7 @@
                 }),
             })
                 .then((res) => res.json())
+                .then(await getAllZocalos())
                 .then(
                     showInfo({
                         type: "info",
@@ -111,6 +137,7 @@
                     body: JSON.stringify({ id: zocalo.id }),
                 })
                     .then((res) => res.json())
+
                     .then(
                         showInfo({
                             type: "danger",
@@ -124,7 +151,7 @@
                         })
                     );
 
-                getAllZocalos();
+                await getAllZocalos();
                 // alert("Zocalo Eliminado: \n" + zocalo.f1 + " " + zocalo.f2);
             } else {
                 alert("No se puede eliminar un zocalo cuando esta en uso");
@@ -162,11 +189,13 @@
                 }),
             })
                 .then((res) => res.json())
+
                 .then(
                     showInfo({
                         type: "primary",
                         text:
                             "ACTUALIZASTE EL ZOCALO N°: " +
+                            (zocalos.indexOf(zocalo) + 1 < 10 ? "0" : "") +
                             (zocalos.indexOf(zocalo) + 1) +
                             " - " +
                             f1 +
@@ -176,7 +205,6 @@
                 );
 
             // console.log(fromApi);
-
             await getAllZocalos();
             await writeZocaloToFile(zocalos);
             onEdit = 0;
@@ -184,7 +212,9 @@
             console.log(error);
         }
     }
-    async function setOnAirZocalo(id) {
+    async function setOnAirZocalo(zocalo) {
+        // let data = zocalos.find((zocalo) => zocalo.id == id);
+        console.log(zocalo);
         try {
             let apiUrl = apiAddress + "?set=onAir";
             //console.log("La url de la api es: ", apiUrl);
@@ -198,22 +228,24 @@
                         "DELETE, POST, GET, PUT, OPTIONS",
                 },
                 // mode: "no-cors",
-                body: JSON.stringify(id),
+                body: JSON.stringify({ id: zocalo.id }),
             }).then((res) =>
                 res.json().then(
                     showInfo({
                         type: "success",
                         text:
                             "AL AIRE EL ZOCALO N°: " +
-                            (zocalos.indexOf(
-                                zocalos.find((zocalo) => zocalo.id == id)
-                            ) +
-                                1),
+                            (zocalos.indexOf(zocalo) + 1 < 10 ? "0" : "") +
+                            (zocalos.indexOf(zocalo) + 1) +
+                            " - " +
+                            zocalo.f1 +
+                            " - " +
+                            zocalo.f2,
                     })
                 )
             );
 
-            console.log("set on air return: ", fromApi);
+            //console.log("set on air return: ", fromApi);
             await getAllZocalos();
             await writeZocaloToFile();
         } catch (error) {
@@ -262,7 +294,7 @@
                 .then(getZocaloDinamicoFromFile())
                 .then(
                     showInfo({
-                        type: "success",
+                        type: "secondary",
                         text: "ACTUALIZASTE EL ZOCALO AUXILIAR: " + f3,
                     })
                 );
@@ -271,6 +303,7 @@
                 "respuesta desde write Zocalo Dinamico to file",
                 fromApi
             );
+            await getZocaloDinamicoFromFile();
         } catch (error) {
             console.log(error);
         }
@@ -279,8 +312,7 @@
     setInterval(async function () {
         await getAllZocalos();
         await getZocaloDinamicoFromFile();
-        // console.log(zocaloDinamicoOnEdit);
-    }, 1000);
+    }, 3000);
 
     onMount(async function () {
         await getAllZocalos();
@@ -310,8 +342,9 @@
                         <!-- svelte-ignore a11y-autofocus -->
                         <input
                             id="f3text"
-                            class="form-control form-control-sm"
+                            class="form-control form-floating form-control-sm"
                             type="text"
+                            placeholder="Título Auxiliar"
                             bind:value={f3}
                             on:input={() => (zocaloDinamicoOnEdit = true)}
                             maxlength={f3Lenght}
@@ -333,7 +366,7 @@
         </div>
     </div>
     <div class="col-12">
-        <!-- ****LISTA DE ZOCALOS**** -->
+        <!-- ****AGREGAR NUEVO ZOCALO**** -->
         <div class="card bg-dark mt-1">
             <div class="card-header text-white">
                 <h1>AGREGAR NUEVO ZOCALO</h1>
@@ -347,11 +380,12 @@
                 <div class="col-auto">
                     <span class="badge badge-light">{zocalos.length + 1}</span>
                 </div>
-                <div class="col-5">
+                <div class="col-4">
                     <!-- svelte-ignore a11y-autofocus -->
                     <input
-                        class="form-control form-control-sm"
+                        class="form-control form-control-sm form-floating"
                         type="text"
+                        placeholder="Título"
                         bind:value={f1}
                         maxlength={f1Lenght}
                         autofocus
@@ -360,7 +394,8 @@
 
                 <div class="col-5">
                     <input
-                        class="form-control form-control-sm"
+                        class="form-control form-control-sm form-floating"
+                        placeholder="Detalles"
                         type="text"
                         bind:value={f2}
                         maxlength={f2Lenght}
@@ -466,12 +501,9 @@
                     </tbody>
                 </table>
             </div> -->
-
+            <!-- ****LISTA DE ZOCALOS**** -->
             <div class="card-header text-white">
-                <h1>
-                    LISTA DE ZOCALOS
-                    <InfoPill {infoPillData} />
-                </h1>
+                <h1>LISTA DE ZOCALOS</h1>
             </div>
             <div>
                 {#each zocalos as zocalo, i}
@@ -487,8 +519,12 @@
                                 >{i + 1 < 10 ? "0" : ""}{i + 1}</span
                             >
                         </div>
-                        <div class="col-5">
+                        <div class="col-4">
                             <input
+                                style={zocalo.onAir
+                                    ? "background-color: rgb(255,225,225); border-color: rgb(255,0,0);"
+                                    : ""}
+                                class="form-control form-control-sm"
                                 id="f1text{zocalo.id}"
                                 on:input={() => (onEdit = zocalo.id)}
                                 on:keypress={(e) => {
@@ -497,7 +533,6 @@
                                         updateZocalo(zocalo);
                                     }
                                 }}
-                                class="form-control form-control-sm"
                                 type="text"
                                 name="f1"
                                 value={zocalo.f1}
@@ -506,6 +541,9 @@
                         </div>
                         <div class="col-5">
                             <input
+                                style={zocalo.onAir
+                                    ? "background-color: rgb(255,225,225); border-color: rgb(255,0,0);"
+                                    : ""}
                                 id="f2text{zocalo.id}"
                                 on:input={() => (onEdit = zocalo.id)}
                                 on:keypress={(e) => {
@@ -546,9 +584,7 @@
 
                             <button
                                 title="Usar este Zocalo"
-                                on:click|preventDefault={setOnAirZocalo(
-                                    zocalo.id
-                                )}
+                                on:click|preventDefault={setOnAirZocalo(zocalo)}
                                 class={zocalo.onAir
                                     ? "btn btn-danger btn-sm"
                                     : "btn btn-success btn-sm"}

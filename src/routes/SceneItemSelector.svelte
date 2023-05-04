@@ -124,9 +124,9 @@
 </script>
 
 <div class="card bg-dark mt-1">
-    <div class="card-header text-white d-flex justify-content-center">
+    <!-- <div class="card-header text-white d-flex justify-content-center">
         ITEMS GRAFICOS DEL LA SELECCION
-    </div>
+    </div> -->
     <div class="card-body d-grid gap-2 align-items-center">
         <div class="btn-group-vertical">
             <button

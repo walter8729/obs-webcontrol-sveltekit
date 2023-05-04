@@ -34,6 +34,15 @@
 @import "../node_modules/bootstrap/scss/helpers";
 @import "../node_modules/bootstrap/scss/utilities/api";
 
+@font-face {
+    font-family: 'asap_condensedregular';
+    src: url('asapcondensed-regular-webfont.woff2') format('woff2'),
+        url('asapcondensed-regular-webfont.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
 html,
 body,
 div,
@@ -143,3 +152,10 @@ body {
     text-align: center;
 
 }
+
+form{
+    font-family: 'asap_condensedregular';
+}
+// .infopildoras{
+//     font-size: 8px;
+// }

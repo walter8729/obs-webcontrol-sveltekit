@@ -84,36 +84,32 @@
                                 class="text-white px-3 py-4 p-md-5 mx-md-4"
                             >
                                 <h4 class="mb-4">
-                                    Programa sencillo y eficiente para
+                                    Programa sencillo para
                                     controlar graficos de Obs Studio.
                                 </h4>
                                 <hr />
                                 <p class="small mb-0">
-                                    En la izquierda apareceran controles de
-                                    seleccion de escenas.
+                                    En la izquierda apareceran 
+                                    Una Pantalla de preview un selector de escenas
+                                    y un switcher de los elementos de la escena.
                                 </p>
                                 <br />
                                 <p class="small mb-0">
-                                    Por segurida se apagaran todos items de
-                                    la actual escena antes de cambiar a la
-                                    siguiente.
+                                    Por seguridad se apagaran todos items de la 
+                                    escena actual antes de cambiar a la siguiente.
+                                </p>
+                                <br />
+                                
+                                <p class="small mb-0">
+                                    Tambien se cuenta con un boton que 
+                                    apagara todos los items de la escena
                                 </p>
                                 <br />
                                 <p class="small mb-0">
-                                    Al centro se tiene una pantalla con el
-                                    preview de la Pantalla.
-                                </p>
-                                <br />
-                                <p class="small mb-0">
-                                    Abajo botones para cada item grafico y
-                                    un boton para apagar a todos.
-                                </p>
-                                <br />
-                                <p class="small mb-0">
-                                    Hacia el lado derecho se tiene el edito
+                                    Hacia el lado derecho se tiene el editor
                                     de los textos de los zocalos, ademas de
-                                    botones que permitiran editar, meter o
-                                    sacar del aire dicho texto.
+                                    botones que permitiran borrar, editar(aparece cuando se edita) 
+                                    y para setear uso en el zocalo.
                                 </p>
                             </div>
                         </div>

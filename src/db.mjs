@@ -17,6 +17,16 @@ db.run(`CREATE TABLE IF NOT EXISTS zocalos (
   
 )`);
 
+// Crear tabla de usuario si no existe
+db.run(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL,
+  password TEXT NOT NULL 
+)`);
+
+
+
+
 // Obtener todos los zocalos
 export function getAllZocalos() {
   return new Promise((resolve, reject) => {
@@ -28,6 +38,7 @@ export function getAllZocalos() {
     });
   });
 }
+
 
 // Agregar un nuevo zocalo
 export function addZocalo(zocalo) {
@@ -56,30 +67,19 @@ export function updateZocalo(zocalo) {
 // Marcar a zocalo como activo
 export function setOnAirZocalo(id) {
   return new Promise((resolve, reject) => {
-
-    db.get(`SELECT COUNT(*) AS onAirCount FROM zocalos WHERE onAir = ? `, [true], (err, row) => {
-      if (row.onAirCount > 0) {
-        // console.log('ya hay zocalos en el aire');
-        db.run(`UPDATE zocalos SET onAir = ?`, [0], function (err) {
-          if (err) {
-            reject(err);
-          }
-        });
-        db.run(`UPDATE zocalos SET onAir = ? WHERE id = ?`, [1, id], function (err) {
-          if (err) {
-            reject(err);
-          }
-          resolve(this.changes);
-        });
-      } else {
-        db.run(`UPDATE zocalos SET onAir = ? WHERE id = ?`, [1, id], function (err) {
-          if (err) {
-            reject(err);
-          }
-          resolve(this.changes);
-        });
+    //ponemos on false el onAir Actual
+    db.run(`UPDATE zocalos SET onAir = ? WHERE onAir = ? `, [false, true], function (err) {
+      if (err) {
+        reject(err);
       }
-    })
+    });
+    //luego en true 
+    db.run(`UPDATE zocalos SET onAir = ? WHERE id = ?`, [true, id], function (err) {
+      if (err) {
+        reject(err);
+      }
+      resolve(this.changes);
+    });
   })
 }
 
@@ -91,6 +91,44 @@ export function deleteZocalo(id) {
         reject(err);
       }
       resolve(this.changes);
+    });
+  });
+}
+
+// Agregar un nuevo usuario
+export function addUser(user) {
+  return new Promise((resolve, reject) => {
+    db.run(`INSERT INTO users (user, password) VALUES (?, ?)`, [user.username, user.password], function (err) {
+      if (err) {
+        reject(err);
+      }
+      resolve(this.lastID);
+    });
+  });
+}
+
+
+// Obtener todos los users
+export function getAllUsers() {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM users', (err, rows) => {
+      if (err) {
+        reject(err);
+      }
+      resolve(rows);
+    });
+  });
+}
+
+
+// Obtener user
+export function getUser(username) {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM users WHERE username=?', [username], (err, rows) => {
+      if (err) {
+        reject(err);
+      }
+      resolve(rows);
     });
   });
 }

@@ -1,4 +1,5 @@
 <script>
+    // import { PUBLIC_OBS_ADDRESS, PUBLIC_OBS_PASSWORD } from '$env/static/public';
     export const obsAddress = "";
 </script>
 

@@ -5,6 +5,7 @@
     export let scenes;
     export let programScene;
     export let previewScene;
+    export let isStudioMode;
 
     async function getSceneList() {
         try {

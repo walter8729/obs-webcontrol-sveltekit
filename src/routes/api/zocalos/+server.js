@@ -55,7 +55,7 @@ export const PUT = async ({ request, url }) => {
 
     switch (postFunction) {
         case 'onAir':
-            let onAirDbResponse = await setOnAirZocalo(body);
+            let onAirDbResponse = await setOnAirZocalo(body.id);
             console.log("Respuesta onAir from DB ", onAirDbResponse);
             return new Response(JSON.stringify(onAirDbResponse), { status: 200 });
         case 'updateZocalo':
