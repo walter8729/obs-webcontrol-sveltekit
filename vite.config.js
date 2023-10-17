@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [sveltekit()],
 
   server: {
-    port: 5173,
+    port: 5000,
     strictPort: false,
     cors: {
       origin: "*",
@@ -20,7 +20,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 5173,
+    port: 5000,
     strictPort: false,
     cors: {
       origin: "*",

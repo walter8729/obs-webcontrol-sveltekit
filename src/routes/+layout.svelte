@@ -1,5 +1,5 @@
 <script>
-  export let data;
+  // export let data;
   import "../app.scss";
   let user = "desconocido";
 
@@ -54,4 +54,4 @@
   </div>
 </nav>
 
-<slot /> 
+<slot />

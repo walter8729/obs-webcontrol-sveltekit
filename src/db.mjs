@@ -83,7 +83,7 @@ export function setOnAirZocalo(id) {
   })
 }
 
-// Eliminar un contacto existente
+// Eliminar un zocalo existente
 export function deleteZocalo(id) {
   return new Promise((resolve, reject) => {
     db.run(`DELETE FROM zocalos WHERE id = ?`, [id], function (err) {

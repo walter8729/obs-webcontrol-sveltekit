@@ -128,7 +128,7 @@
                             <button on:click={connect}> CONECTAR</button>
                         </div>
                     </div>
-                {:else if isStudioMode  }
+                {:else if isStudioMode}
                     <div class="card bg-dark mt-1">
                         <div class="card-header text-white">
                             Info {connected ? "conectado" : "desconectado"}

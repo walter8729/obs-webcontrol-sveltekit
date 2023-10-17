@@ -1,7 +1,7 @@
 import { obs, sendCommand } from '../../../obs';
 import { error } from '@sveltejs/kit';
 
-const address = 'ws://localhost:4455';
+const address = 'ws://192.168.1.154:4455';
 const password = '000000';
 
 let errorMessage = '';
@@ -151,8 +151,8 @@ async function switchSceneItem(sceneName, sceneItemId, enable) {
 
 async function switchScene(sceneName) {
 
-        await sendCommand('SetCurrentProgramScene', {sceneName})
-    
+    await sendCommand('SetCurrentProgramScene', { sceneName })
+
 }
 
 

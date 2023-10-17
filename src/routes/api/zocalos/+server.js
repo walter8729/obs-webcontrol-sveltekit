@@ -1,3 +1,6 @@
+//Romi Walter Miranda abril 2023
+//Manejador DE API, GET POST PUT Y DELETE DE LOS ZOCALOS
+
 // import { Router } from 'express';
 import { getAllZocalos, addZocalo, updateZocalo, deleteZocalo, setOnAirZocalo } from '../../../db.mjs';
 import { writeZocaloToFile, writeZocaloDinamicoToFile, readZocaloFromFile, readZocaloDinamicoFromFile } from '../../../file.js'

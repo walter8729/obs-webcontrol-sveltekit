@@ -12,7 +12,7 @@
     export let infoPillData = { type: "info", text: "" };
     export let infoPillDataTimeOut;
 
-    // zocalos form variables
+    // limite texto zocalos form variables
     let f1Lenght = 60;
     let f2Lenght = 70;
     let f3Lenght = 65;
@@ -26,7 +26,7 @@
     //reset formulario de agregar nuevo zocalo
     $: resetAddForm();
 
-    let apiAddress = `http://192.168.1.154:5173/api/zocalos`;
+    let apiAddress = `http://192.168.1.154:5000/api/zocalos`;
 
     //reseteo de binds de formulario de agregar zocalo
     function resetAddForm() {
@@ -59,7 +59,7 @@
             let fromApi = await fetch(apiUrl).then((res) => res.json());
             //declaracion reactiva de svelte
             zocalos = [...fromApi];
-            console.log("getAllZocalos: \n", zocalos);
+            // console.log("getAllZocalos: \n", zocalos);
         } catch (error) {
             console.log(error);
         }
@@ -108,7 +108,7 @@
                         type: "info",
                         text:
                             "AGREGASTE UN NUEVO ZOCALO N°: " +
-                            (zocalos.length + 1) +
+                            zocalos.length +
                             " - " +
                             f1 +
                             " - " +
@@ -309,6 +309,7 @@
         }
     }
 
+    //Intervalo principal de Actualización
     setInterval(async function () {
         await getAllZocalos();
         await getZocaloDinamicoFromFile();
