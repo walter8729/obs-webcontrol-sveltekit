@@ -1,4 +1,4 @@
-//Manejar lectura y escritorio de los zocalos como archivo
+//Manejar lectura y escritura de los zocalos como archivo
 
 import { readFile, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs';

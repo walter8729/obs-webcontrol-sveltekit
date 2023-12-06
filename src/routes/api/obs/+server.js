@@ -109,10 +109,10 @@ async function getSceneList() {
     try {
         //obtenemos la lista de scenas
         let data = await sendCommand('GetSceneList')
-        // cconsole.log('GetSceneList', data);
+        // console.log('GetSceneList', data);
         programScene = data.currentProgramSceneName || '';
         previewScene = data.currentPreviewSceneName;
-        //lo guardamos invertido
+        //la lista de escenas lo  guardamos con orden invertido
         scenes = data.scenes.slice().reverse();
     } catch (e) {
         console.log(e);

@@ -130,14 +130,15 @@
     <div class="card-body d-grid gap-2 align-items-center">
         <div class="btn-group-vertical">
             <button
-            class="btn btn-bg btn-warning mb-2 "
-            on:click={switchOffAllSceneItem(programScene)}>APAGAR TODOS LOS GRAFICOS</button
-        >
+                class="btn btn-bg btn-warning mb-2"
+                on:click={switchOffAllSceneItem(programScene)}
+                >APAGAR TODOS LOS GRAFICOS</button
+            >
 
             {#each programSceneItemList as item}
                 <button
                     class="{item.sceneItemEnabled
-                        ? 'btn btn-success'
+                        ? 'btn btn-success btn-outline-light'
                         : 'btn btn-outline-light'} btn-bg"
                     on:click={switchSceneItem(
                         programScene,

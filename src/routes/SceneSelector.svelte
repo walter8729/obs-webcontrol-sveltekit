@@ -122,7 +122,7 @@
                 <button
                     class="{scene.sceneName === programScene
                         ? 'btn btn-danger'
-                        : ' btn btn-info'}  btn-sm"
+                        : 'btn btn-info'}  btn-sm"
                     on:click={switchScene(scene.sceneName)}
                 >
                     {scene.sceneName}

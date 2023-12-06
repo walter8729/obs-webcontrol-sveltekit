@@ -2,7 +2,7 @@
 //Manejador DE API, GET POST PUT Y DELETE DE LOS ZOCALOS
 
 // import { Router } from 'express';
-import { getAllZocalos, addZocalo, updateZocalo, deleteZocalo, setOnAirZocalo } from '../../../db.mjs';
+import { getAllZocalos, getAllZocalosDinamicos, addZocalo, addZocaloDinamico, updateZocaloDinamico, deleteZocaloDinamico, updateZocalo, deleteZocalo, setOnAirZocalo } from '../../../db.mjs';
 import { writeZocaloToFile, writeZocaloDinamicoToFile, readZocaloFromFile, readZocaloDinamicoFromFile } from '../../../file.js'
 // const router = Router();
 
@@ -22,6 +22,8 @@ export const GET = async ({ request, url }) => {
     switch (parameter) {
         case 'getAllZocalos':
             return new Response(JSON.stringify(await getAllZocalos()), { "status": 200 });
+        case 'getAllZocalosDinamicos':
+            return new Response(JSON.stringify(await getAllZocalosDinamicos()), { "status": 200 });
         case 'getZocaloDinamicoFromFile':
             return new Response(JSON.stringify(await readZocaloDinamicoFromFile()), { "status": 200 });
 
@@ -43,6 +45,10 @@ export const POST = async ({ request, url }) => {
             let addZocaloRes = await addZocalo(body)
             console.log("Respuesta addZocalo from DB ", addZocaloRes);
             return new Response(JSON.stringify(addZocaloRes), { status: 200 });
+        case 'addZocaloDinamico':
+            let addZocaloDinamicoRes = await addZocaloDinamico(body)
+            console.log("Respuesta addZocaloDinamico from DB ", addZocaloDinamicoRes);
+            return new Response(JSON.stringify(addZocaloDinamicoRes), { status: 200 });
         default:
             return new Response(JSON.stringify("operacion no admitida"), { status: 400 });
     }
@@ -65,6 +71,10 @@ export const PUT = async ({ request, url }) => {
             let updateDbResponse = await updateZocalo(body);
             console.log("Respuesta updateZocalo from DB ", updateDbResponse);
             return new Response(JSON.stringify(updateDbResponse), { status: 200 });
+        case 'updateZocaloDinamico':
+            let updateDbDinamicoResponse = await updateZocaloDinamico(body);
+            console.log("Respuesta updateZocaloDinamico from DB ", updateDbDinamicoResponse);
+            return new Response(JSON.stringify(updateDbDinamicoResponse), { status: 200 });
         case 'writeZocaloToFile':
             // await writeZocaloToFile(body);
             // console.log("Zocalo escrito en fichero ", body);
@@ -89,6 +99,9 @@ export const DELETE = async ({ request, url }) => {
         case 'deleteZocalo':
             let res = deleteZocalo(body.id)
             return new Response(JSON.stringify(res), { "status": 200 });
+        case 'deleteZocaloDinamico':
+            let resDinamico = deleteZocaloDinamico(body.id)
+            return new Response(JSON.stringify(resDinamico), { "status": 200 });
         default:
             return new Response(JSON.stringify("operacion no admitida"), { "status": 301 });
     }

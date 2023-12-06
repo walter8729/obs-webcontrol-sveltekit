@@ -4,6 +4,7 @@
 
     //zocalos variables
     $: zocalos = [];
+    $: zocalosDinamicos = [];
     let f1 = "";
     let f2 = "";
     let f3 = "";
@@ -113,7 +114,7 @@
                             f1 +
                             " - " +
                             f2,
-                    })
+                    }),
                 );
         } catch (error) {
             console.log(error);
@@ -148,7 +149,7 @@
                                 zocalo.f1 +
                                 " - " +
                                 zocalo.f2,
-                        })
+                        }),
                     );
 
                 await getAllZocalos();
@@ -201,7 +202,7 @@
                             f1 +
                             " - " +
                             f2,
-                    })
+                    }),
                 );
 
             // console.log(fromApi);
@@ -241,8 +242,8 @@
                             zocalo.f1 +
                             " - " +
                             zocalo.f2,
-                    })
-                )
+                    }),
+                ),
             );
 
             //console.log("set on air return: ", fromApi);
@@ -296,12 +297,12 @@
                     showInfo({
                         type: "secondary",
                         text: "ACTUALIZASTE EL ZOCALO AUXILIAR: " + f3,
-                    })
+                    }),
                 );
 
             console.log(
                 "respuesta desde write Zocalo Dinamico to file",
-                fromApi
+                fromApi,
             );
             await getZocaloDinamicoFromFile();
         } catch (error) {
@@ -339,7 +340,40 @@
                     <div class="col-auto">
                         <span class="badge badge-light">00</span>
                     </div>
-                    <div class="col-7">
+                    <div class="col-3">
+                        <!-- svelte-ignore a11y-autofocus -->
+                        <input
+                            id="f3text"
+                            class="form-control form-floating form-control-sm"
+                            type="text"
+                            placeholder="Título Auxiliar"
+                            bind:value={f3}
+                            on:input={() => (zocaloDinamicoOnEdit = true)}
+                            maxlength={f3Lenght}
+                            autofocus
+                        />
+                    </div>
+
+                    <div class="col-1">
+                        <button
+                            class="btn btn-info btn-sm"
+                            disabled={!zocaloDinamicoOnEdit}
+                            on:click|preventDefault={writeZocaloDinamicoToFile}
+                        >
+                            ACTUALIZAR
+                        </button>
+                    </div>
+                </form>
+
+                <form
+                    action=""
+                    method="post"
+                    class="row mb-1 gy-1 gx-1 align-items-center"
+                >
+                    <div class="col-auto">
+                        <span class="badge badge-light">00</span>
+                    </div>
+                    <div class="col-3">
                         <!-- svelte-ignore a11y-autofocus -->
                         <input
                             id="f3text"
@@ -366,6 +400,7 @@
             </div>
         </div>
     </div>
+
     <div class="col-12">
         <!-- ****AGREGAR NUEVO ZOCALO**** -->
         <div class="card bg-dark mt-1">
