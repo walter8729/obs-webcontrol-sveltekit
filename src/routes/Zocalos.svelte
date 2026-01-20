@@ -1,642 +1,428 @@
 <script>
     import { onMount } from "svelte";
     import InfoPill from "./InfoPill.svelte";
+    import { obsState, sendCommand as wsSendCommand } from "$lib/obs_store";
 
-    //zocalos variables
-    $: zocalos = [];
-    $: zocalosDinamicos = [];
+    // states from store (everything synced via websocket)
+    $: allZocalos = $obsState.zocalos || [];
+    $: allZocalosDinamicos = $obsState.zocalosDinamicos || [];
+    $: programs = $obsState.programs || [];
+    $: activeProgramId = $obsState.activeProgramId;
+
+    // local state for simultaneous editing
+    let editingProgramId = null;
+    let newProgramName = "";
+
+    // Initialize editingProgramId if not set
+    $: if (editingProgramId === null && activeProgramId) {
+        editingProgramId = activeProgramId;
+    }
+
+    // Filtered data for the CURRENT VIEW
+    $: currentZocalos = allZocalos.filter(
+        (z) => z.program_id === editingProgramId,
+    );
+    $: currentF3Data = allZocalosDinamicos.find(
+        (z) => z.program_id === editingProgramId,
+    ) || { f3: "" };
+    $: currentF3 = currentF3Data.f3;
+
     let f1 = "";
     let f2 = "";
-    let f3 = "";
 
-    //Info pill variables
+    // Info pill variables
     export let infoPillData = { type: "info", text: "" };
-    export let infoPillDataTimeOut;
+    let infoPillDataTimeOut;
 
-    // limite texto zocalos form variables
+    // limit texto zocalos form variables
     let f1Lenght = 60;
     let f2Lenght = 70;
     let f3Lenght = 65;
 
-    //numero de id del  zocalo siendo editado, por default 0
+    // numero de id del zocalo siendo editado
     $: onEdit = 0;
-
-    //si esque se esta editando el zocalo dinamico
     $: zocaloDinamicoOnEdit = false;
 
-    //reset formulario de agregar nuevo zocalo
-    $: resetAddForm();
-
-    let apiAddress = `http://192.168.1.154:5000/api/zocalos`;
-
-    //reseteo de binds de formulario de agregar zocalo
     function resetAddForm() {
         f1 = "";
         f2 = "";
     }
-    //info del ultimo cambio que se realizo, para evitar usar confirm y alerts
-    async function showInfo(data) {
-        //si hay una info lo resetea
+
+    function showInfo(data) {
         if (infoPillData.text !== "") {
             resetShowInfo();
         }
-        //luego mostramos info.
         infoPillData = data;
         infoPillDataTimeOut = setTimeout(() => {
             infoPillData = { type: "info", text: "" };
         }, 5000);
     }
 
-    //funcion que resetea el show info, y rompe el setTimeOut
-    async function resetShowInfo() {
+    function resetShowInfo() {
         infoPillData = { type: "info", text: "" };
         clearTimeout(infoPillDataTimeOut);
     }
-    //Pedimos al api la lista completa de zocalos
-    async function getAllZocalos() {
-        try {
-            let apiUrl = apiAddress + "?get=getAllZocalos";
-            //console.log("La url de la api es: ", apiUrl);
-            let fromApi = await fetch(apiUrl).then((res) => res.json());
-            //declaracion reactiva de svelte
-            zocalos = [...fromApi];
-            // console.log("getAllZocalos: \n", zocalos);
-        } catch (error) {
-            console.log(error);
-        }
-    }
-    //Pedimos al api el txt dinamico en fichero esta no la lee de DB.
-    async function getZocaloDinamicoFromFile() {
-        try {
-            let apiUrl = apiAddress + "?get=getZocaloDinamicoFromFile";
-            //console.log("La url de la api es: ", apiUrl);
-            let fromApi = await fetch(apiUrl).then((res) => res.json());
-            // console.log("getZocaloDinamicoFromFile: ", fromApi);
-            if (f3 !== fromApi.f3 && !zocaloDinamicoOnEdit) {
-                f3 = fromApi.f3;
-            }
-        } catch (error) {
-            console.log(error);
-        }
-    }
-    async function addZocalo(f1, f2) {
+
+    async function addZocalo(f1Text, f2Text) {
+        if (!f1Text || !f2Text) return;
+        wsSendCommand("addZocalo", {
+            f1: f1Text.toUpperCase(),
+            f2: f2Text.toUpperCase(),
+            onAir: false,
+            program_id: editingProgramId,
+        });
         resetAddForm();
-        try {
-            let apiUrl = apiAddress + "?set=addZocalo";
-            f1 = f1.toUpperCase();
-            f2 = f2.toUpperCase();
-            //console.log("La url de la api es: ", apiUrl);
-            let fromApi = await fetch(apiUrl, {
-                method: "POST",
-                mode: "no-cors",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Methods":
-                        "DELETE, POST, GET, PUT, OPTIONS",
-                },
-                body: JSON.stringify({
-                    f1,
-                    f2,
-                    onAir: false,
-                }),
-            })
-                .then((res) => res.json())
-                .then(await getAllZocalos())
-                .then(
-                    showInfo({
-                        type: "info",
-                        text:
-                            "AGREGASTE UN NUEVO ZOCALO N°: " +
-                            zocalos.length +
-                            " - " +
-                            f1 +
-                            " - " +
-                            f2,
-                    }),
-                );
-        } catch (error) {
-            console.log(error);
-        }
+        showInfo({
+            type: "info",
+            text: `AGREGASTE UN NUEVO ZOCALO: ${f1Text.toUpperCase()}`,
+        });
     }
+
     async function deleteZocalo(zocalo) {
-        try {
-            if (!zocalo.onAir) {
-                let apiUrl = apiAddress + "?set=deleteZocalo";
-                //console.log("La url de la api es: ", apiUrl);
-                let fromApi = await fetch(apiUrl, {
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Methods":
-                            "DELETE, POST, GET, PUT, OPTIONS",
-                    },
-                    // mode: "no-cors",
-                    body: JSON.stringify({ id: zocalo.id }),
-                })
-                    .then((res) => res.json())
-
-                    .then(
-                        showInfo({
-                            type: "danger",
-                            text:
-                                "ELIMINASTE EL ZOCALO N°: " +
-                                (zocalos.indexOf(zocalo) + 1) +
-                                " - " +
-                                zocalo.f1 +
-                                " - " +
-                                zocalo.f2,
-                        }),
-                    );
-
-                await getAllZocalos();
-                // alert("Zocalo Eliminado: \n" + zocalo.f1 + " " + zocalo.f2);
-            } else {
-                alert("No se puede eliminar un zocalo cuando esta en uso");
-            }
-        } catch (error) {
-            console.log(error);
+        if (zocalo.onAir && editingProgramId === activeProgramId) {
+            alert(
+                "No se puede eliminar un zocalo cuando esta al aire en el programa activo",
+            );
+            return;
         }
+        wsSendCommand("deleteZocalo", { id: zocalo.id });
+        showInfo({
+            type: "danger",
+            text: `ELIMINASTE EL ZOCALO: ${zocalo.f1}`,
+        });
     }
+
     async function updateZocalo(zocalo) {
-        try {
-            let apiUrl = apiAddress + "?set=updateZocalo";
-            //console.log("La url de la api es: ", apiUrl);
-
-            let f1 = document
-                .getElementById("f1text" + zocalo.id)
-                .value.toUpperCase();
-            let f2 = document
-                .getElementById("f2text" + zocalo.id)
-                .value.toUpperCase();
-            let fromApi = await fetch(apiUrl, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Methods":
-                        "DELETE, POST, GET, PUT, OPTIONS",
-                },
-                // mode: "no-cors",
-                body: JSON.stringify({
-                    id: zocalo.id,
-                    f1,
-                    f2,
-                    onAir: zocalo.onAir,
-                }),
-            })
-                .then((res) => res.json())
-
-                .then(
-                    showInfo({
-                        type: "primary",
-                        text:
-                            "ACTUALIZASTE EL ZOCALO N°: " +
-                            (zocalos.indexOf(zocalo) + 1 < 10 ? "0" : "") +
-                            (zocalos.indexOf(zocalo) + 1) +
-                            " - " +
-                            f1 +
-                            " - " +
-                            f2,
-                    }),
-                );
-
-            // console.log(fromApi);
-            await getAllZocalos();
-            await writeZocaloToFile(zocalos);
-            onEdit = 0;
-        } catch (error) {
-            console.log(error);
-        }
+        const newF1 = document
+            .getElementById("f1text" + zocalo.id)
+            .value.toUpperCase();
+        const newF2 = document
+            .getElementById("f2text" + zocalo.id)
+            .value.toUpperCase();
+        wsSendCommand("updateZocalo", {
+            id: zocalo.id,
+            f1: newF1,
+            f2: newF2,
+            onAir: zocalo.onAir,
+        });
+        onEdit = 0;
+        showInfo({ type: "primary", text: `ACTUALIZASTE EL ZOCALO: ${newF1}` });
     }
+
     async function setOnAirZocalo(zocalo) {
-        // let data = zocalos.find((zocalo) => zocalo.id == id);
-        console.log(zocalo);
-        try {
-            let apiUrl = apiAddress + "?set=onAir";
-            //console.log("La url de la api es: ", apiUrl);
-            let fromApi = await fetch(apiUrl, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Methods":
-                        "DELETE, POST, GET, PUT, OPTIONS",
-                },
-                // mode: "no-cors",
-                body: JSON.stringify({ id: zocalo.id }),
-            }).then((res) =>
-                res.json().then(
-                    showInfo({
-                        type: "success",
-                        text:
-                            "AL AIRE EL ZOCALO N°: " +
-                            (zocalos.indexOf(zocalo) + 1 < 10 ? "0" : "") +
-                            (zocalos.indexOf(zocalo) + 1) +
-                            " - " +
-                            zocalo.f1 +
-                            " - " +
-                            zocalo.f2,
-                    }),
-                ),
-            );
-
-            //console.log("set on air return: ", fromApi);
-            await getAllZocalos();
-            await writeZocaloToFile();
-        } catch (error) {
-            console.log(error);
-        }
+        wsSendCommand("setOnAirZocalo", {
+            id: zocalo.id,
+            program_id: editingProgramId,
+        });
+        showInfo({
+            type: "success",
+            text: `ZOCALO SELECCIONADO EN ESTE PROGRAMA: ${zocalo.f1}`,
+        });
     }
-    async function writeZocaloToFile() {
-        try {
-            let apiUrl = apiAddress + "?set=writeZocaloToFile";
-            let fromApi = await fetch(apiUrl, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Methods":
-                        "DELETE, POST, GET, PUT, OPTIONS",
-                },
-                // mode: "no-cors",
-                body: JSON.stringify(zocalos),
-            }).then((res) => res.json());
 
-            console.log("respuesta desde write to file", fromApi);
-        } catch (error) {
-            console.log(error);
-        }
-    }
     async function writeZocaloDinamicoToFile() {
-        try {
-            zocaloDinamicoOnEdit = false;
-            let f3 = document.getElementById("f3text").value.toUpperCase();
-            let apiUrl = apiAddress + "?set=writeZocaloDinamicoToFile";
-            let fromApi = await fetch(apiUrl, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Methods":
-                        "DELETE, POST, GET, PUT, OPTIONS",
-                },
-                // mode: "no-cors",
-                body: JSON.stringify(f3),
-            })
-                .then((res) => res.json())
-                .then(getZocaloDinamicoFromFile())
-                .then(
-                    showInfo({
-                        type: "secondary",
-                        text: "ACTUALIZASTE EL ZOCALO AUXILIAR: " + f3,
-                    }),
-                );
+        const f3Text = document.getElementById("f3text").value.toUpperCase();
+        wsSendCommand("writeZocaloDinamicoToFile", {
+            program_id: editingProgramId,
+            f3: f3Text,
+        });
+        zocaloDinamicoOnEdit = false;
+        showInfo({
+            type: "secondary",
+            text: "ACTUALIZASTE EL ZOCALO AUXILIAR",
+        });
+    }
 
-            console.log(
-                "respuesta desde write Zocalo Dinamico to file",
-                fromApi,
-            );
-            await getZocaloDinamicoFromFile();
-        } catch (error) {
-            console.log(error);
+    function createProgram() {
+        if (!newProgramName) return;
+        wsSendCommand("addProgram", { name: newProgramName.toUpperCase() });
+        newProgramName = "";
+    }
+
+    function removeProgram(id, name) {
+        if (confirm(`¿Eliminar programa "${name}" y todos sus zocalos?`)) {
+            wsSendCommand("deleteProgram", { id });
+            if (editingProgramId === id) editingProgramId = programs[0].id;
         }
     }
 
-    //Intervalo principal de Actualización
-    setInterval(async function () {
-        await getAllZocalos();
-        await getZocaloDinamicoFromFile();
-    }, 3000);
-
-    onMount(async function () {
-        await getAllZocalos();
-        await getZocaloDinamicoFromFile();
-    });
+    function setLive(id) {
+        wsSendCommand("setActiveProgram", { id });
+        showInfo({ type: "warning", text: "PROGRAMA EN VIVO CAMBIADO" });
+    }
 </script>
 
-<!-- ****ZOCALOS**** -->
-<!-- ****ZOCALO DINAMICO**** -->
 <div class="container-fluid">
-    <div class="row justify-content-center">
-        <div class="col-12">
-            <div class="card bg-secondary mt-1">
-                <div class="card-header text-white">
-                    <h1>ZOCALO AUXILIAR</h1>
+    <div class="row">
+        <!-- Sidebar Programas -->
+        <div class="col-md-3">
+            <div class="card bg-dark text-white mt-1">
+                <div
+                    class="card-header p-2 d-flex justify-content-between align-items-center"
+                >
+                    <h6 class="m-0">GESTIÓN DE PROGRAMAS</h6>
                 </div>
-
-                <form
-                    action=""
-                    method="post"
-                    class="row mb-1 gy-1 gx-1 align-items-center"
-                >
-                    <div class="col-auto">
-                        <span class="badge badge-light">00</span>
-                    </div>
-                    <div class="col-3">
-                        <!-- svelte-ignore a11y-autofocus -->
+                <div class="card-body p-2">
+                    <div class="input-group input-group-sm mb-3">
                         <input
-                            id="f3text"
-                            class="form-control form-floating form-control-sm"
                             type="text"
-                            placeholder="Título Auxiliar"
-                            bind:value={f3}
-                            on:input={() => (zocaloDinamicoOnEdit = true)}
-                            maxlength={f3Lenght}
-                            autofocus
+                            class="form-control bg-secondary text-white border-0"
+                            placeholder="Nuevo..."
+                            bind:value={newProgramName}
                         />
-                    </div>
-
-                    <div class="col-1">
                         <button
-                            class="btn btn-info btn-sm"
-                            disabled={!zocaloDinamicoOnEdit}
-                            on:click|preventDefault={writeZocaloDinamicoToFile}
+                            class="btn btn-info"
+                            type="button"
+                            on:click={createProgram}>+</button
                         >
-                            ACTUALIZAR
-                        </button>
-                    </div>
-                </form>
-
-                <form
-                    action=""
-                    method="post"
-                    class="row mb-1 gy-1 gx-1 align-items-center"
-                >
-                    <div class="col-auto">
-                        <span class="badge badge-light">00</span>
-                    </div>
-                    <div class="col-3">
-                        <!-- svelte-ignore a11y-autofocus -->
-                        <input
-                            id="f3text"
-                            class="form-control form-floating form-control-sm"
-                            type="text"
-                            placeholder="Título Auxiliar"
-                            bind:value={f3}
-                            on:input={() => (zocaloDinamicoOnEdit = true)}
-                            maxlength={f3Lenght}
-                            autofocus
-                        />
                     </div>
 
-                    <div class="col-1">
-                        <button
-                            class="btn btn-info btn-sm"
-                            disabled={!zocaloDinamicoOnEdit}
-                            on:click|preventDefault={writeZocaloDinamicoToFile}
-                        >
-                            ACTUALIZAR
-                        </button>
+                    <div
+                        class="list-group list-group-flush"
+                        style="font-size: 0.9rem;"
+                    >
+                        {#each programs as prog}
+                            <div
+                                class="list-group-item bg-dark border-secondary p-1"
+                            >
+                                <div
+                                    class="d-flex justify-content-between align-items-center mb-1"
+                                >
+                                    <button
+                                        class="btn btn-sm text-start flex-grow-1 {prog.id ===
+                                        editingProgramId
+                                            ? 'btn-info'
+                                            : 'btn-outline-secondary text-white'}"
+                                        on:click={() =>
+                                            (editingProgramId = prog.id)}
+                                    >
+                                        {prog.id === editingProgramId
+                                            ? "👁 "
+                                            : ""}{prog.name}
+                                    </button>
+                                    {#if programs.length > 1}
+                                        <button
+                                            class="btn btn-sm btn-link text-danger p-0 ms-2"
+                                            on:click={() =>
+                                                removeProgram(
+                                                    prog.id,
+                                                    prog.name,
+                                                )}>×</button
+                                        >
+                                    {/if}
+                                </div>
+                                <div class="d-flex gap-1 mt-1">
+                                    {#if prog.id === activeProgramId}
+                                        <span class="badge bg-danger w-100 py-1"
+                                            >🔴 EN VIVO</span
+                                        >
+                                    {:else}
+                                        <button
+                                            class="btn btn-dark btn-sm w-100 border-secondary py-0"
+                                            on:click={() => setLive(prog.id)}
+                                            >VOLVER VIVO</button
+                                        >
+                                    {/if}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
-                </form>
+                    <div class="mt-2 small text-muted">
+                        * Puedes editar cualquier programa sin afectar el que
+                        está EN VIVO. El programa EN VIVO es el que escribe los
+                        archivos .txt para OBS.
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="col-12">
-        <!-- ****AGREGAR NUEVO ZOCALO**** -->
-        <div class="card bg-dark mt-1">
-            <div class="card-header text-white">
-                <h1>AGREGAR NUEVO ZOCALO</h1>
-            </div>
-
-            <form
-                action=""
-                method="post"
-                class="row gb-1 gx-1 align-items-center mb-2"
-            >
-                <div class="col-auto">
-                    <span class="badge badge-light">{zocalos.length + 1}</span>
-                </div>
-                <div class="col-4">
-                    <!-- svelte-ignore a11y-autofocus -->
-                    <input
-                        class="form-control form-control-sm form-floating"
-                        type="text"
-                        placeholder="Título"
-                        bind:value={f1}
-                        maxlength={f1Lenght}
-                        autofocus
-                    />
+        <!-- Zocalos Area -->
+        <div class="col-md-9">
+            <div class="card bg-secondary mt-1">
+                <div
+                    class="card-header text-white p-2 d-flex justify-content-between align-items-center"
+                >
+                    <h5 class="m-0">
+                        EDITANDO: {programs.find(
+                            (p) => p.id === editingProgramId,
+                        )?.name || "..."}
+                    </h5>
+                    {#if editingProgramId === activeProgramId}
+                        <span class="badge bg-danger blink">ESTÁ AL AIRE</span>
+                    {/if}
                 </div>
 
-                <div class="col-5">
-                    <input
-                        class="form-control form-control-sm form-floating"
-                        placeholder="Detalles"
-                        type="text"
-                        bind:value={f2}
-                        maxlength={f2Lenght}
-                    />
-                </div>
-
-                <div class="col-auto">
-                    <button
-                        class="btn btn-info btn-sm"
-                        on:click|preventDefault={addZocalo(f1, f2)}
-                    >
-                        AGREGAR
-                    </button>
-                </div>
-            </form>
-
-            <!-- <div class="table-responsive-sm">
-                <table class="table  table-striped table-dark table-sm">
-                    <thead>
-                        <tr>
-                            <th>N°</th>
-                            <th>Zocalos</th>
-                            
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {#each zocalos as zocalo, i}
-                            <tr>
-                                <td class="col-1">{i + 1}</td>
-                                <td>
-                                    <form
-                                        class="row gy-1 gx-1 align-items-left"
-                                        id="form{zocalo.id}"
+                <div class="card-body p-2 bg-dark">
+                    <!-- ****ZOCALO DINAMICO**** -->
+                    <div class="card bg-secondary mb-2">
+                        <div class="card-body p-2">
+                            <form class="row gy-1 gx-1 align-items-center">
+                                <div class="col-auto">
+                                    <span class="badge badge-light">AUX</span>
+                                </div>
+                                <div class="col">
+                                    <input
+                                        id="f3text"
+                                        class="form-control form-control-sm"
+                                        type="text"
+                                        placeholder="Título Auxiliar"
+                                        value={currentF3}
+                                        on:input={() =>
+                                            (zocaloDinamicoOnEdit = true)}
+                                        maxlength={f3Lenght}
+                                    />
+                                </div>
+                                <div class="col-auto">
+                                    <button
+                                        class="btn btn-info btn-sm"
+                                        disabled={!zocaloDinamicoOnEdit}
+                                        on:click|preventDefault={writeZocaloDinamicoToFile}
                                     >
-                                        <div class="col-5">
-                                            <input
-                                                id="f1text{zocalo.id}"
-                                                on:input={() => (onEdit = zocalo.id)}
-                                                class="form-control form-control-sm"
-                                                type="text"
-                                                name="f1"
-                                                value={zocalo.f1}
-                                                maxlength="60"
-                                            />
-            
-                                        </div>
-                                        <div class="col-5">
-                                            <input
-                                                id="f2text{zocalo.id}"
-                                                on:input={() => (onEdit = zocalo.id)}
-                                                class="form-control form-control-sm"
-                                                type="text"
-                                                name="f2"
-                                                value={zocalo.f2}
-                                                maxlength="70"
-                                            />
-                                        </div>
-            
-                                        <div class="col-auto">
-                                            <button
-                                                title="Eliminar"
-                                                class="btn btn-danger btn-sm"
-                                                disabled={zocalo.onAir}
-                                                on:click|preventDefault={deleteZocalo(
-                                                    zocalo
-                                                )}
-                                            >
-                                                🗑
-                                            </button>
-                                        </div>
-            
-                                        <div class="col-auto">
-                                            <button
-                                            title="Guardar las modificaciones"
-                                                type="submit"
-                                                class="btn btn-primary btn-sm"
-                                                hidden={zocalo.id === onEdit ? false : true}
-                                                on:click|preventDefault={updateZocalo(
-                                                    zocalo
-                                                )}
-                                            >
-                                                ✓
-                                            </button>
-                                        </div>
-                                        <div class="col-auto">
-                                            <button
-                                            title="Usar este Zocalo"
-                                                on:click|preventDefault={setOnAirZocalo(
-                                                    zocalo.id
-                                                )}
-                                                class={zocalo.onAir
-                                                    ? "btn btn-danger btn-sm active"
-                                                    : "btn btn-success btn-sm"}
-                                                disabled={zocalo.onAir}
-                                            >
-                                                {zocalo.onAir ? "ON AIR" : "USAR"}
-                                            </button>
-                                        </div>
-                                    </form>
-                                </td>
-                            </tr>
-                        {/each}
-                    </tbody>
-                </table>
-            </div> -->
-            <!-- ****LISTA DE ZOCALOS**** -->
-            <div class="card-header text-white">
-                <h1>LISTA DE ZOCALOS</h1>
-            </div>
-            <div>
-                {#each zocalos as zocalo, i}
-                    <form
-                        class="row gy-1 gx-1 align-items-center mb-1"
-                        id="form{zocalo.id}"
-                    >
-                        <div class="col-auto">
-                            <span
-                                class="badge badge-light {zocalo.onAir
-                                    ? 'text-danger bg-white'
-                                    : 'text-white'}"
-                                >{i + 1 < 10 ? "0" : ""}{i + 1}</span
-                            >
+                                        ACTUALIZAR
+                                    </button>
+                                </div>
+                            </form>
                         </div>
-                        <div class="col-4">
-                            <input
-                                style={zocalo.onAir
-                                    ? "background-color: rgb(255,225,225); border-color: rgb(255,0,0);"
-                                    : ""}
-                                class="form-control form-control-sm"
-                                id="f1text{zocalo.id}"
-                                on:input={() => (onEdit = zocalo.id)}
-                                on:keypress={(e) => {
-                                    if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        updateZocalo(zocalo);
-                                    }
-                                }}
-                                type="text"
-                                name="f1"
-                                value={zocalo.f1}
-                                maxlength={f1Lenght}
-                            />
-                        </div>
-                        <div class="col-5">
-                            <input
-                                style={zocalo.onAir
-                                    ? "background-color: rgb(255,225,225); border-color: rgb(255,0,0);"
-                                    : ""}
-                                id="f2text{zocalo.id}"
-                                on:input={() => (onEdit = zocalo.id)}
-                                on:keypress={(e) => {
-                                    if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        updateZocalo(zocalo);
-                                    }
-                                }}
-                                class="form-control form-control-sm"
-                                type="text"
-                                name="f2"
-                                value={zocalo.f2}
-                                maxlength={f2Lenght}
-                            />
-                        </div>
-                        <div
-                            class="btn-group col-auto justify-content-center"
-                            role="group"
-                        >
-                            <button
-                                title="Eliminar"
-                                class="btn btn-danger btn-sm"
-                                disabled={zocalo.onAir}
-                                hidden={zocalo.id === onEdit ? true : false}
-                                on:click|preventDefault={deleteZocalo(zocalo)}
-                            >
-                                🗑
-                            </button>
-                            <button
-                                title="Guardar las modificaciones"
-                                type="submit"
-                                class="btn btn-primary btn-sm"
-                                hidden={zocalo.id === onEdit ? false : true}
-                                on:click|preventDefault={updateZocalo(zocalo)}
-                            >
-                                ✓
-                            </button>
+                    </div>
 
-                            <button
-                                title="Usar este Zocalo"
-                                on:click|preventDefault={setOnAirZocalo(zocalo)}
-                                class={zocalo.onAir
-                                    ? "btn btn-danger btn-sm"
-                                    : "btn btn-success btn-sm"}
-                                disabled={zocalo.onAir && false}
-                            >
-                                {zocalo.onAir ? "AIRE" : "USAR"}
-                                <span
-                                    class={zocalo.onAir && zocalo.id
-                                        ? "spinner-grow spinner-grow-sm"
-                                        : ""}
-                                />
-                            </button>
+                    <!-- ****AGREGAR NUEVO ZOCALO**** -->
+                    <div class="card bg-dark border-secondary mb-2">
+                        <div class="card-body p-2">
+                            <form class="row gy-1 gx-1 align-items-center">
+                                <div class="col-auto">
+                                    <span class="badge badge-light"
+                                        >{currentZocalos.length + 1}</span
+                                    >
+                                </div>
+                                <div class="col-5">
+                                    <input
+                                        class="form-control form-control-sm"
+                                        type="text"
+                                        placeholder="Título"
+                                        bind:value={f1}
+                                        maxlength={f1Lenght}
+                                    />
+                                </div>
+                                <div class="col-5">
+                                    <input
+                                        class="form-control form-control-sm"
+                                        placeholder="Detalles"
+                                        type="text"
+                                        bind:value={f2}
+                                        maxlength={f2Lenght}
+                                    />
+                                </div>
+                                <div class="col-auto">
+                                    <button
+                                        class="btn btn-info btn-sm"
+                                        on:click|preventDefault={() =>
+                                            addZocalo(f1, f2)}>AGREGAR</button
+                                    >
+                                </div>
+                            </form>
                         </div>
-                    </form>
-                {/each}
+                    </div>
+
+                    <div
+                        class="zocalos-list p-1"
+                        style="max-height: 60vh; overflow-y: auto;"
+                    >
+                        {#each currentZocalos as zocalo, i}
+                            <form
+                                class="row gy-1 gx-1 align-items-center mb-1"
+                                id="form{zocalo.id}"
+                                on:submit|preventDefault={() =>
+                                    updateZocalo(zocalo)}
+                            >
+                                <div class="col-auto">
+                                    <span
+                                        class="badge {zocalo.onAir
+                                            ? 'btn-danger'
+                                            : 'btn-outline-light'} "
+                                        >{i + 1 < 10 ? "0" : ""}{i + 1}</span
+                                    >
+                                </div>
+                                <div class="col-5">
+                                    <input
+                                        class="form-control form-control-sm {zocalo.onAir
+                                            ? 'on-air-input'
+                                            : ''}"
+                                        id="f1text{zocalo.id}"
+                                        on:input={() => (onEdit = zocalo.id)}
+                                        type="text"
+                                        value={zocalo.f1}
+                                    />
+                                </div>
+                                <div class="col-5">
+                                    <input
+                                        class="form-control form-control-sm {zocalo.onAir
+                                            ? 'on-air-input'
+                                            : ''}"
+                                        id="f2text{zocalo.id}"
+                                        on:input={() => (onEdit = zocalo.id)}
+                                        type="text"
+                                        value={zocalo.f2}
+                                    />
+                                </div>
+                                <div
+                                    class="btn-group col-auto p-0"
+                                    role="group"
+                                >
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline-danger btn-sm border-0"
+                                        disabled={zocalo.onAir &&
+                                            editingProgramId ===
+                                                activeProgramId}
+                                        hidden={zocalo.id === onEdit}
+                                        on:click|preventDefault={() =>
+                                            deleteZocalo(zocalo)}>🗑</button
+                                    >
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary btn-sm"
+                                        hidden={zocalo.id !== onEdit}>✓</button
+                                    >
+                                    <button
+                                        type="button"
+                                        on:click|preventDefault={() =>
+                                            setOnAirZocalo(zocalo)}
+                                        class="btn btn-sm {zocalo.onAir
+                                            ? 'btn-danger'
+                                            : 'btn-success'}"
+                                        disabled={zocalo.onAir}
+                                    >
+                                        {zocalo.onAir ? "AIRE" : "USAR"}
+                                    </button>
+                                </div>
+                            </form>
+                        {/each}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .on-air-input {
+        background-color: #fff0f0;
+        border-color: #ff0000;
+        font-weight: bold;
+    }
+    .blink {
+        animation: blink-animation 1s steps(5, start) infinite;
+    }
+    @keyframes blink-animation {
+        to {
+            visibility: hidden;
+        }
+    }
+    .zocalos-list::-webkit-scrollbar {
+        width: 5px;
+    }
+    .zocalos-list::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 10px;
+    }
+</style>

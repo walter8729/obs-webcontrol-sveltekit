@@ -1,31 +1,22 @@
 <script>
     import { onMount } from "svelte";
-    import { each, empty, prevent_default } from "svelte/internal";
-    import { obs, sendCommand } from "../obs";
     import Zocalos from "./Zocalos.svelte";
     import Log from "./Log.svelte";
     import Preview from "./Preview.svelte";
     import SceneSelector from "./SceneSelector.svelte";
     import SceneItemSelector from "./SceneItemSelector.svelte";
     import InfoPill from "./InfoPill.svelte";
-    const obsAddress = "ws://192.168.1.154:4455";
-    const password = "000000";
+    import {
+        obsState,
+        obsConnected,
+        sendCommand as wsSendCommand,
+    } from "$lib/obs_store";
 
-    //stados obs
-    $: status = "";
-    $: connected = false;
-    let isStudioMode = false;
-    $: scenes = [];
-    $: previewScene = "";
-    $: programScene = "";
+    // states from store
+    $: connected = $obsConnected;
 
-    //variables para zocalos
+    // variables for zocalos
     $: logged = false;
-    $: f1 = "";
-    $: f2 = "";
-    $: f3 = "";
-
-    //Info pill variables
     $: infoPillData = { type: "info", text: "" };
 
     onMount(async () => {
@@ -33,7 +24,6 @@
         if ("wakeLock" in navigator) {
             try {
                 await navigator.wakeLock.request("screen");
-                // Re-request when coming back
                 document.addEventListener("visibilitychange", async () => {
                     if (document.visibilityState === "visible") {
                         await navigator.wakeLock.request("screen");
@@ -41,70 +31,15 @@
                 });
             } catch (e) {}
         }
-
-        try {
-            await connect();
-        } catch (error) {}
-
-        // Export the sendCommand() function to the window object
-        window.sendCommand = sendCommand;
     });
 
-    async function connect() {
-        status = "Connecting";
-        console.log(
-            "Connecting to:",
-            obsAddress,
-            "- using password:",
-            password
-        );
-        //get object with vercion and rpcVersion
-        try {
-            const { obsWebSocketVersion, negotiatedRpcVersion } =
-                await obs.connect(obsAddress, password);
-            console.log(
-                `Connected to obs-websocket version ${obsWebSocketVersion} (using RPC ${negotiatedRpcVersion})`
-            );
-            //actualizamos coneccion
-            connected = true;
-            status = "Connected";
-            //if error
-        } catch (e) {
-            console.log(e);
-            status = e;
-        }
+    // In this new architecture, the backend handles the connection.
+    // The "CONECTAR" button could trigger a backend reconnect if needed,
+    // but for now the backend auto-reconnects.
+    function reconnect() {
+        console.log("Requesting backend to check OBS connection...");
+        // wsSendCommand("reconnectOBS"); // We can add this if needed
     }
-
-    async function switchOffStudioMode() {
-        try {
-            await sendCommand("SetStudioModeEnabled", {
-                studioModeEnabled: false,
-            });
-            // isStudioMode = false;
-        } catch (e) {
-            console.log(e);
-        }
-    }
-
-    async function disconnect() {
-        await obs.disconnect();
-        connected = false;
-    }
-
-    // OBS events
-    obs.on("ConnectionClosed", () => {
-        connected = false;
-        console.log("Connection closed");
-    });
-
-    obs.on("Identified", async () => {
-        console.log("Connected");
-        connected = true;
-        // isStudioMode =
-        //     (await sendCommand("GetStudioModeEnabled")).studioModeEnabled ||
-        //     false;
-        // console.log("Studio Mode is " + isStudioMode);
-    });
 </script>
 
 {#if logged}
@@ -121,48 +56,31 @@
                 {#if !connected}
                     <div class="card bg-dark mt-1">
                         <div class="card-header text-white">
-                            Info: {connected ? "conectado" : "desconetado"}
-                        </div>
-                        <div class="card-body">
-                            <span class="text-white">Obs No esta Abierto</span>
-                            <button on:click={connect}> CONECTAR</button>
-                        </div>
-                    </div>
-                {:else if isStudioMode}
-                    <div class="card bg-dark mt-1">
-                        <div class="card-header text-white">
-                            Info {connected ? "conectado" : "desconectado"}
+                            Estado: Desconectado
                         </div>
                         <div class="card-body">
                             <span class="text-white"
-                                >DEBES APAGAR EL MODO ESTUDIO</span
+                                >OBS no está disponible o el servidor está
+                                conectando...</span
                             >
-                            <button on:click={switchOffStudioMode}
-                                >APAGAR</button
+                            <button
+                                class="btn btn-warning mt-2"
+                                on:click={reconnect}>REINTENTAR</button
                             >
                         </div>
                     </div>
-                    >
-                {/if}
-
-                {#if connected && !isStudioMode}
+                {:else}
                     <!-- ****PREVIEW**** -->
                     <div class="card bg-dark mt-1">
                         <div class="card-body">
-                            <Preview {programScene} />
+                            <Preview />
                         </div>
                     </div>
 
                     <!-- ****CARD SCENAS**** -->
                     <div class="card bg-dark mt-1">
                         <div class="card-body">
-                            <!-- ****DROPDOWN DE SCENAS**** -->
-                            <SceneSelector
-                                bind:scenes
-                                bind:programScene
-                                bind:previewScene
-                                bind:isStudioMode
-                            />
+                            <SceneSelector />
                         </div>
                     </div>
 

@@ -1,2 +1,3 @@
-const OBS_ADDRESS = "ws://192.168.1.154:4455"
-const OBS_PASSWORDS = "000000"
+export const OBS_ADDRESS = "ws://localhost:4455";
+export const OBS_PASSWORD = "000000";
+export const API_BASE_URL = "/api";

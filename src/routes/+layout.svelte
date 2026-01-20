@@ -1,6 +1,9 @@
 <script>
   // export let data;
   import "../app.scss";
+  import { onMount } from "svelte";
+  import { initWebSocket, obsConnected } from "$lib/obs_store";
+
   let user = "desconocido";
 
   $: hora = "";
@@ -14,6 +17,10 @@
       .format(new Date())
       .toLocaleUpperCase();
   }, 1000);
+
+  onMount(() => {
+    initWebSocket();
+  });
 </script>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark pb-md-2">
