@@ -1,6 +1,6 @@
 import OBSWebSocket from 'obs-websocket-js';
 import { OBS_ADDRESS, OBS_PASSWORD } from '../config.js';
-import { getAllZocalos, setOnAirZocalo, addZocalo, deleteZocalo, updateZocalo, getAllPrograms, getActiveProgram, setActiveProgram, addProgram, deleteProgram, getZocaloDinamico, updateZocaloDinamico, getAllZocalosGlobal, getAllZocalosDinamicosGlobal } from '../../db.mjs';
+import { getAllZocalos, setOnAirZocalo, addZocalo, deleteZocalo, updateZocalo, getAllPrograms, getActiveProgram, setActiveProgram, addProgram, deleteProgram, getZocaloDinamico, updateZocaloDinamico, getAllZocalosGlobal, getAllZocalosDinamicosGlobal, updateProgram, setOnAirAuxiliary } from '../../db.mjs';
 import { readZocaloDinamicoFromFile, writeZocaloToFile, writeZocaloDinamicoToFile } from '../../file.js';
 
 export const obs = new OBSWebSocket();
@@ -28,13 +28,16 @@ async function updateState() {
         state.zocalos = await getAllZocalosGlobal();
         state.zocalosDinamicos = await getAllZocalosDinamicosGlobal();
 
-        // Update Files based on ACTIVE program
-        const activeZocalos = state.zocalos.filter(z => z.program_id === state.activeProgramId);
-        const activeF3 = state.zocalosDinamicos.find(z => z.program_id === state.activeProgramId);
+        // Update Files based on GLOBAL "on air" status
+        const onAirZocalo = state.zocalos.find(z => Number(z.onAir) === 1);
+        const activeF3Slot = state.zocalosDinamicos.find(z => Number(z.onAir) === 1);
 
-        await writeZocaloToFile(activeZocalos);
-        if (activeF3) {
-            await writeZocaloDinamicoToFile(activeF3.f3);
+        await writeZocaloToFile(onAirZocalo ? [onAirZocalo] : []);
+
+        if (activeF3Slot) {
+            await writeZocaloDinamicoToFile(activeF3Slot.f3);
+        } else {
+            await writeZocaloDinamicoToFile("");
         }
 
         // Update OBS specific state if connected
@@ -196,15 +199,19 @@ export async function initWS(io) {
                         await updateState();
                         break;
                     case 'setOnAirZocalo':
-                        if (data.program_id && data.program_id !== state.activeProgramId) {
+                        if (data.program_id && Number(data.program_id) !== Number(state.activeProgramId)) {
                             console.log(`Auto-switching active program to ${data.program_id}`);
                             await setActiveProgram(data.program_id);
                         }
-                        await setOnAirZocalo(data.id, data.program_id || state.activeProgramId);
+                        await setOnAirZocalo(data.id);
                         await updateState();
                         break;
                     case 'writeZocaloDinamicoToFile':
-                        await updateZocaloDinamico(data.program_id, data.f3);
+                        await updateZocaloDinamico(data.program_id, data.f3, data.slot || 1);
+                        await updateState();
+                        break;
+                    case 'setOnAirAuxiliary':
+                        await setOnAirAuxiliary(data.id);
                         await updateState();
                         break;
                     case 'addProgram':
@@ -217,6 +224,10 @@ export async function initWS(io) {
                         break;
                     case 'setActiveProgram':
                         await setActiveProgram(data.id);
+                        await updateState();
+                        break;
+                    case 'updateProgram':
+                        await updateProgram(data.id, data.name);
                         await updateState();
                         break;
                 }

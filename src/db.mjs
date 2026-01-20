@@ -18,7 +18,18 @@ db.run(`CREATE TABLE IF NOT EXISTS programs (
     // Asegurar que exista al menos un programa por defecto
     db.get("SELECT count(*) as count FROM programs", (err, row) => {
       if (row && row.count === 0) {
-        db.run("INSERT INTO programs (name, active) VALUES ('GENERAL', 1)");
+        db.run("INSERT INTO programs (name, active) VALUES ('GENERAL', 1)", function (err) {
+          if (!err) {
+            const generalId = this.lastID;
+            // Seed generic zocalos for GENERAL
+            db.run("INSERT INTO zocalos (f1, f2, program_id) VALUES ('TITULO GENERAL', 'SUBTITULO GENERAL', ?)", [generalId]);
+            db.run("INSERT INTO zocalos (f1, f2, program_id) VALUES ('OTRO TITULO', 'OTRO SUBTITULO', ?)", [generalId]);
+            // Ensure 3 aux slots for GENERAL
+            db.run("INSERT INTO zocalosDinamicos (f3, slot, program_id) VALUES ('', 1, ?)", [generalId]);
+            db.run("INSERT INTO zocalosDinamicos (f3, slot, program_id) VALUES ('', 2, ?)", [generalId]);
+            db.run("INSERT INTO zocalosDinamicos (f3, slot, program_id) VALUES ('', 3, ?)", [generalId]);
+          }
+        });
       }
     });
   }
@@ -39,19 +50,21 @@ db.run(`ALTER TABLE zocalos ADD COLUMN program_id INTEGER DEFAULT 1`, (err) => {
   // Si da error es porque probablemente ya existe
 });
 
-// Crear tabla de zocalos dinamicos si no existe (ahora por programa)
+// Crear tabla de zocalos dinamicos si no existe (ahora por programa y slot)
 db.run(`CREATE TABLE IF NOT EXISTS zocalosDinamicos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   f3 TEXT NOT NULL,
   onAir INTEGER NOT NULL DEFAULT 0,
   program_id INTEGER DEFAULT 1,
+  slot INTEGER DEFAULT 1,
+  UNIQUE(program_id, slot),
   FOREIGN KEY(program_id) REFERENCES programs(id)
 )`);
 
 // Migración: Agregar program_id a zocalosDinamicos si no existe
-db.run(`ALTER TABLE zocalosDinamicos ADD COLUMN program_id INTEGER DEFAULT 1`, (err) => {
-  // Si da error es porque probablemente ya existe
-});
+db.run(`ALTER TABLE zocalosDinamicos ADD COLUMN program_id INTEGER DEFAULT 1`, (err) => { });
+// Migración: Agregar slot a zocalosDinamicos si no existe
+db.run(`ALTER TABLE zocalosDinamicos ADD COLUMN slot INTEGER DEFAULT 1`, (err) => { });
 
 // Crear tabla de usuario si no existe
 db.run(`CREATE TABLE IF NOT EXISTS users (
@@ -85,7 +98,22 @@ export function addProgram(name) {
   return new Promise((resolve, reject) => {
     db.run('INSERT INTO programs (name) VALUES (?)', [name], function (err) {
       if (err) reject(err);
-      resolve(this.lastID);
+      const programId = this.lastID;
+      // Initialize 3 aux slots for the new program
+      db.run("INSERT INTO zocalosDinamicos (f3, slot, program_id) VALUES ('', 1, ?)", [programId]);
+      db.run("INSERT INTO zocalosDinamicos (f3, slot, program_id) VALUES ('', 2, ?)", [programId]);
+      db.run("INSERT INTO zocalosDinamicos (f3, slot, program_id) VALUES ('', 3, ?)", [programId]);
+      resolve(programId);
+    });
+  });
+}
+
+export function updateProgram(id, name) {
+  return new Promise((resolve, reject) => {
+    if (id === 1) return reject(new Error("Cannot rename GENERAL program"));
+    db.run('UPDATE programs SET name = ? WHERE id = ?', [name, id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
     });
   });
 }
@@ -104,6 +132,7 @@ export function setActiveProgram(id) {
 
 export function deleteProgram(id) {
   return new Promise((resolve, reject) => {
+    if (id === 1) return reject(new Error("No se puede eliminar el programa GENERAL"));
     db.serialize(() => {
       db.run('DELETE FROM zocalos WHERE program_id = ?', [id]);
       db.run('DELETE FROM zocalosDinamicos WHERE program_id = ?', [id]);
@@ -142,7 +171,7 @@ export function addZocalo(zocalo) {
   console.log("DB addZocalo received:", zocalo);
   return new Promise((resolve, reject) => {
     db.run(`INSERT INTO zocalos (f1, f2, onAir, program_id) VALUES (?, ?, ?, ?)`,
-      [zocalo.f1, zocalo.f2, zocalo.onAir ? 1 : 0, zocalo.program_id || 1], function (err) {
+      [zocalo.f1 || "", zocalo.f2 || "", zocalo.onAir ? 1 : 0, zocalo.program_id || 1], function (err) {
         if (err) reject(err);
         resolve(this.lastID);
       });
@@ -160,11 +189,13 @@ export function updateZocalo(zocalo) {
   });
 }
 
-// Marcar a zocalo como activo dentro de su programa
-export function setOnAirZocalo(id, programId = 1) {
+// Marcar a zocalo como activo globalmente
+export function setOnAirZocalo(id) {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
-      db.run(`UPDATE zocalos SET onAir = 0 WHERE program_id = ?`, [programId]);
+      // Set ALL zocalos in system to 0
+      db.run(`UPDATE zocalos SET onAir = 0`);
+      // Set specific one to 1
       db.run(`UPDATE zocalos SET onAir = 1 WHERE id = ?`, [id], function (err) {
         if (err) reject(err);
         resolve(this.changes);
@@ -197,27 +228,48 @@ export function getAllZocalosDinamicosGlobal() {
 
 export function getZocaloDinamico(programId = 1) {
   return new Promise((resolve, reject) => {
-    db.get('SELECT * FROM zocalosDinamicos WHERE program_id = ?', [programId], (err, row) => {
-      if (err) reject(err);
-      resolve(row || { f3: '' });
+    db.serialize(() => {
+      // Ensure 3 slots exist
+      [1, 2, 3].forEach(s => {
+        db.run(`INSERT OR IGNORE INTO zocalosDinamicos (f3, onAir, program_id, slot) VALUES ('', 0, ?, ?)`, [programId, s]);
+      });
+      // Retrieve them
+      db.all('SELECT * FROM zocalosDinamicos WHERE program_id = ? ORDER BY slot ASC', [programId], (err, rows) => {
+        if (err) reject(err);
+        resolve(rows || []);
+      });
     });
   });
 }
 
-export function updateZocaloDinamico(programId, f3) {
+export function updateZocaloDinamico(programId, f3, slot = 1) {
   return new Promise((resolve, reject) => {
-    db.get('SELECT id FROM zocalosDinamicos WHERE program_id = ?', [programId], (err, row) => {
+    db.get('SELECT id FROM zocalosDinamicos WHERE program_id = ? AND slot = ?', [programId, slot], (err, row) => {
       if (row) {
-        db.run('UPDATE zocalosDinamicos SET f3 = ? WHERE program_id = ?', [f3, programId], (err) => {
+        db.run('UPDATE zocalosDinamicos SET f3 = ? WHERE program_id = ? AND slot = ?', [f3, programId, slot], (err) => {
           if (err) reject(err);
           resolve();
         });
       } else {
-        db.run('INSERT INTO zocalosDinamicos (f3, program_id) VALUES (?, ?)', [f3, programId], (err) => {
+        db.run('INSERT INTO zocalosDinamicos (f3, program_id, slot) VALUES (?, ?, ?)', [f3, programId, slot], (err) => {
           if (err) reject(err);
           resolve();
         });
       }
+    });
+  });
+}
+
+export function setOnAirAuxiliary(id) {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      // Set ALL aux in the entire system to 0
+      db.run('UPDATE zocalosDinamicos SET onAir = 0');
+      // Set specific one to 1
+      db.run('UPDATE zocalosDinamicos SET onAir = 1 WHERE id = ?', [id], function (err) {
+        if (err) reject(err);
+        resolve(this.changes);
+      });
     });
   });
 }

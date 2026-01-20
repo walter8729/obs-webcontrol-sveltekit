@@ -9,7 +9,7 @@
     // Local state
     let newProgramName = "";
     let editingId = null; // ID of program being renamed
-    let editName = ""; // Temp name content
+    let editNameContent = ""; // Temp name content
     let infoPillData = { type: "info", text: "" };
     let infoPillDataTimeOut;
 
@@ -34,37 +34,33 @@
     }
 
     function removeProgram(id, name) {
+        if (id === 1) return; // Standard protection
         if (confirm(`¿Eliminar programa "${name}" y todos sus zocalos?`)) {
             wsSendCommand("deleteProgram", { id });
             showInfo({ type: "danger", text: `PROGRAMA ELIMINADO: ${name}` });
         }
     }
 
-    function setLive(id) {
-        wsSendCommand("setActiveProgram", { id });
-        showInfo({
-            type: "warning",
-            text: "PROGRAMA EN VIVO CAMBIADO MANUALMENTE",
-        });
-    }
-
     function startEdit(prog) {
+        if (prog.id === 1) return; // Cannot edit GENERAL
         editingId = prog.id;
-        editName = prog.name;
+        editNameContent = prog.name;
     }
 
     function cancelEdit() {
         editingId = null;
-        editName = "";
+        editNameContent = "";
     }
 
-    /* NOTE: We might need to implement updateProgram in backend/store if not exists. 
-       Checking obs_server.js, there isn't an explicit 'updateProgram' (rename) command yet 
-       in the switch case or db imports. I'll stick to what exists for now or add it if needed.
-       Refactoring request said "crear, editar, actualizar o elimar". 
-       I should probably add 'updateProgramName' to backend to fulfill requirements.
-       For now, I'll assume I can only ADD/DELETE/SET_ACTIVE until I verify DB support.
-    */
+    function saveEdit() {
+        if (!editNameContent.trim()) return;
+        wsSendCommand("updateProgram", {
+            id: editingId,
+            name: editNameContent.toUpperCase(),
+        });
+        showInfo({ type: "primary", text: "PROGRAMA ACTUALIZADO" });
+        editingId = null;
+    }
 </script>
 
 <div class="container-fluid pt-2">
@@ -115,35 +111,52 @@
                                         <span class="badge bg-danger me-3 p-2"
                                             >EN VIVO</span
                                         >
-                                    {:else}
-                                        <button
-                                            class="btn btn-sm btn-outline-warning me-3"
-                                            on:click={() => setLive(prog.id)}
-                                        >
-                                            PONER AL AIRE
-                                        </button>
                                     {/if}
 
-                                    <span class="h5 m-0">{prog.name}</span>
+                                    {#if editingId === prog.id}
+                                        <input
+                                            type="text"
+                                            class="form-control form-control-sm bg-dark text-white border-info w-50"
+                                            bind:value={editNameContent}
+                                            on:keydown={(e) =>
+                                                e.key === "Enter" && saveEdit()}
+                                            autofocus
+                                        />
+                                    {:else}
+                                        <span class="h5 m-0">{prog.name}</span>
+                                    {/if}
                                 </div>
 
                                 <div>
-                                    <button
-                                        class="btn btn-outline-secondary btn-sm text-white border-0"
-                                        on:click={() =>
-                                            alert(
-                                                "Renaming not yet implemented in backend",
-                                            )}
-                                    >
-                                        ✎ (Renombrar pendiente)
-                                    </button>
-                                    <button
-                                        class="btn btn-outline-danger btn-sm border-0 ms-2"
-                                        on:click={() =>
-                                            removeProgram(prog.id, prog.name)}
-                                    >
-                                        🗑 ELIMINAR
-                                    </button>
+                                    {#if editingId === prog.id}
+                                        <button
+                                            class="btn btn-success btn-sm"
+                                            on:click={saveEdit}>✓</button
+                                        >
+                                        <button
+                                            class="btn btn-outline-light btn-sm ms-1"
+                                            on:click={cancelEdit}>×</button
+                                        >
+                                    {:else}
+                                        <button
+                                            class="btn btn-outline-info btn-sm border-0"
+                                            on:click={() => startEdit(prog)}
+                                            disabled={prog.id === 1}
+                                        >
+                                            ✎ EDITAR
+                                        </button>
+                                        <button
+                                            class="btn btn-outline-danger btn-sm border-0 ms-2"
+                                            on:click={() =>
+                                                removeProgram(
+                                                    prog.id,
+                                                    prog.name,
+                                                )}
+                                            disabled={prog.id === 1}
+                                        >
+                                            🗑 ELIMINAR
+                                        </button>
+                                    {/if}
                                 </div>
                             </div>
                         {/each}

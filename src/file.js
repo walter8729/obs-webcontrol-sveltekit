@@ -30,28 +30,21 @@ export async function readZocaloDinamicoFromFile() {
 
 export async function writeZocaloToFile(zocalos) {
 
-    let zocalo = zocalos.find((zocalo) => zocalo.onAir == true);
-    // console.log(zocalo);
+    let zocalo = zocalos.find((zocalo) => Number(zocalo.onAir) === 1);
 
     if (zocalo) {
-        writeFile('src/f1.txt', zocalo.f1, (err, data) => {
-            try {
-                console.log("Se escribio f1:", zocalo.f1);
-            } catch {
-                return err;
-            }
+        writeFile('src/f1.txt', zocalo.f1 || '', (err) => {
+            if (!err) console.log("Se escribio f1:", zocalo.f1);
         });
-        writeFile('src/f2.txt', zocalo.f2, (err, data) => {
-            try {
-
-                console.log("Se escribio f2:", zocalo.f2);
-            } catch {
-                return err;
-            }
+        writeFile('src/f2.txt', zocalo.f2 || '', (err) => {
+            if (!err) console.log("Se escribio f2:", zocalo.f2);
         });
         return zocalo;
+    } else {
+        writeFile('src/f1.txt', '', (err) => { });
+        writeFile('src/f2.txt', '', (err) => { });
+        console.log("Se limpiaron f1 y f2 (ninguno al aire)");
     }
-
 };
 
 export async function writeZocaloDinamicoToFile(textoDinamico) {

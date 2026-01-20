@@ -9,29 +9,29 @@
     $: programs = $obsState.programs || [];
     $: activeProgramId = $obsState.activeProgramId;
     $: activeProgramName =
-        programs.find((p) => p.id === activeProgramId)?.name || "DESCONOCIDO";
+        programs.find((p) => Number(p.id) === Number(activeProgramId))?.name ||
+        "DESCONOCIDO";
 
     // local state for simultaneous editing
     let editingProgramId = null;
 
     // Initialize editingProgramId if not set, prefer active or first available
     $: if (editingProgramId === null && programs.length > 0) {
-        // If active program exists, default to it, otherwise first one
         if (activeProgramId) {
-            editingProgramId = activeProgramId;
+            editingProgramId = Number(activeProgramId);
         } else {
-            editingProgramId = programs[0].id;
+            editingProgramId = Number(programs[0].id);
         }
     }
 
     // Filtered data for the CURRENT VIEW
     $: currentZocalos = allZocalos.filter(
-        (z) => z.program_id === editingProgramId,
+        (z) => Number(z.program_id) === Number(editingProgramId),
     );
-    $: currentF3Data = allZocalosDinamicos.find(
-        (z) => z.program_id === editingProgramId,
-    ) || { f3: "" };
-    $: currentF3 = currentF3Data.f3;
+    // currentZocalosDinamicos will be an array of 3 objects
+    $: currentZocalosDinamicos = allZocalosDinamicos
+        .filter((z) => Number(z.program_id) === Number(editingProgramId))
+        .sort((a, b) => a.slot - b.slot);
 
     let f1 = "";
     let f2 = "";
@@ -47,7 +47,8 @@
 
     // numero de id del zocalo siendo editado
     $: onEdit = 0;
-    $: zocaloDinamicoOnEdit = false;
+    // Track which aux slot ID is being edited
+    $: onEditAux = 0;
 
     function resetAddForm() {
         f1 = "";
@@ -70,22 +71,25 @@
     }
 
     async function addZocalo(f1Text, f2Text) {
-        if (!f1Text || !f2Text) return;
+        // Permitir vacios como pidió el usuario
         wsSendCommand("addZocalo", {
-            f1: f1Text.toUpperCase(),
-            f2: f2Text.toUpperCase(),
+            f1: (f1Text || "").toUpperCase(),
+            f2: (f2Text || "").toUpperCase(),
             onAir: false,
-            program_id: editingProgramId,
+            program_id: Number(editingProgramId),
         });
         resetAddForm();
         showInfo({
             type: "info",
-            text: `AGREGASTE UN NUEVO ZOCALO: ${f1Text.toUpperCase()}`,
+            text: `ZOCALO AGREGADO`,
         });
     }
 
     async function deleteZocalo(zocalo) {
-        if (zocalo.onAir && editingProgramId === activeProgramId) {
+        if (
+            zocalo.onAir &&
+            Number(editingProgramId) === Number(activeProgramId)
+        ) {
             alert(
                 "No se puede eliminar un zocalo cuando esta al aire en el programa activo",
             );
@@ -94,7 +98,7 @@
         wsSendCommand("deleteZocalo", { id: zocalo.id });
         showInfo({
             type: "danger",
-            text: `ELIMINASTE EL ZOCALO: ${zocalo.f1}`,
+            text: `ELIMINASTE EL ZOCALO`,
         });
     }
 
@@ -112,44 +116,67 @@
             onAir: zocalo.onAir,
         });
         onEdit = 0;
-        showInfo({ type: "primary", text: `ACTUALIZASTE EL ZOCALO: ${newF1}` });
+        showInfo({ type: "primary", text: `ACTUALIZASTE EL ZOCALO` });
     }
 
     async function setOnAirZocalo(zocalo) {
-        // Backend handles auto-switching active program if needed
         wsSendCommand("setOnAirZocalo", {
             id: zocalo.id,
-            program_id: editingProgramId,
+            program_id: Number(editingProgramId),
         });
         showInfo({
             type: "success",
-            text: `ZOCALO SELECCIONADO: ${zocalo.f1}`,
+            text: `ZOCALO AL AIRE`,
         });
     }
 
-    async function writeZocaloDinamicoToFile() {
-        const f3Text = document.getElementById("f3text").value.toUpperCase();
+    async function updateAuxZocalo(slotData) {
+        const newF3 = document
+            .getElementById(`f3text_${slotData.id}`)
+            .value.toUpperCase();
         wsSendCommand("writeZocaloDinamicoToFile", {
-            program_id: editingProgramId,
-            f3: f3Text,
+            program_id: Number(editingProgramId),
+            f3: newF3,
+            slot: slotData.slot,
         });
-        zocaloDinamicoOnEdit = false;
+        onEditAux = 0;
         showInfo({
-            type: "secondary",
-            text: "ACTUALIZASTE EL ZOCALO AUXILIAR",
+            type: "primary",
+            text: `ACTUALIZASTE AUXILIAR ${slotData.slot}`,
+        });
+    }
+
+    async function setOnAirAuxiliary(slotData) {
+        wsSendCommand("setOnAirAuxiliary", {
+            id: slotData.id,
+            program_id: Number(editingProgramId),
+        });
+        showInfo({
+            type: "success",
+            text: `AUXILIAR ${slotData.slot} EN USO`,
+        });
+    }
+
+    async function clearAuxZocalo(slotData) {
+        wsSendCommand("writeZocaloDinamicoToFile", {
+            program_id: Number(editingProgramId),
+            f3: "",
+            slot: slotData.slot,
+        });
+        showInfo({
+            type: "warning",
+            text: `LIMPIASTE AUXILIAR ${slotData.slot}`,
         });
     }
 </script>
 
 <div class="container-fluid">
     <div class="row">
-        <!-- Zocalos Area: Using full width now -->
         <div class="col-md-12">
             <div class="card bg-secondary mt-1">
                 <div
                     class="card-header text-white p-2 d-flex justify-content-between align-items-center gap-3"
                 >
-                    <!-- Program Selector -->
                     <div class="d-flex align-items-center flex-grow-1">
                         <label for="programSelect" class="me-2 text-nowrap"
                             >EDITANDO:</label
@@ -160,14 +187,15 @@
                             bind:value={editingProgramId}
                         >
                             {#each programs as prog}
-                                <option value={prog.id}>{prog.name}</option>
+                                <option value={Number(prog.id)}
+                                    >{prog.name}</option
+                                >
                             {/each}
                         </select>
                     </div>
 
-                    <!-- Status Badge -->
                     <div class="text-end">
-                        {#if editingProgramId === activeProgramId}
+                        {#if Number(editingProgramId) === Number(activeProgramId)}
                             <span
                                 class="badge bg-danger blink fs-6 border border-light"
                             >
@@ -184,40 +212,83 @@
                 </div>
 
                 <div class="card-body p-2 bg-dark">
-                    <!-- ****ZOCALO DINAMICO**** -->
-                    <div class="card bg-secondary mb-2">
+                    <!-- ****ZOCALOS AUXILIARES**** -->
+                    <h6 class="text-white mb-2 ms-1">
+                        ZOCALOS AUXILIARES (F3)
+                    </h6>
+                    <div class="card bg-secondary mb-3">
                         <div class="card-body p-2">
-                            <form class="row gy-1 gx-1 align-items-center">
-                                <div class="col-auto">
-                                    <span class="badge badge-light">AUX</span>
-                                </div>
-                                <div class="col">
-                                    <input
-                                        id="f3text"
-                                        class="form-control form-control-sm"
-                                        type="text"
-                                        placeholder="Título Auxiliar"
-                                        value={currentF3}
-                                        on:input={() =>
-                                            (zocaloDinamicoOnEdit = true)}
-                                        maxlength={f3Lenght}
-                                    />
-                                </div>
-                                <div class="col-auto">
-                                    <button
-                                        class="btn btn-info btn-sm"
-                                        disabled={!zocaloDinamicoOnEdit}
-                                        on:click|preventDefault={writeZocaloDinamicoToFile}
-                                    >
-                                        ACTUALIZAR
-                                    </button>
-                                </div>
-                            </form>
+                            {#each currentZocalosDinamicos as slotData (slotData.id)}
+                                <form
+                                    class="row gy-1 gx-1 align-items-center mb-1"
+                                    on:submit|preventDefault={() =>
+                                        updateAuxZocalo(slotData)}
+                                >
+                                    <div class="col-auto">
+                                        <span
+                                            class="badge {slotData.onAir
+                                                ? 'btn-danger'
+                                                : 'btn-outline-light'}"
+                                        >
+                                            0{slotData.slot}
+                                        </span>
+                                    </div>
+                                    <div class="col">
+                                        <input
+                                            id="f3text_{slotData.id}"
+                                            class="form-control form-control-sm {slotData.onAir
+                                                ? 'on-air-input'
+                                                : ''}"
+                                            type="text"
+                                            placeholder="Título Auxiliar"
+                                            value={slotData.f3}
+                                            on:input={() =>
+                                                (onEditAux = slotData.id)}
+                                            maxlength={f3Lenght}
+                                        />
+                                    </div>
+                                    <div class="col-auto">
+                                        <div class="btn-group">
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline-danger btn-sm border-0"
+                                                hidden={onEditAux ===
+                                                    slotData.id}
+                                                on:click|preventDefault={() =>
+                                                    clearAuxZocalo(slotData)}
+                                                title="Limpiar">🗑</button
+                                            >
+
+                                            <button
+                                                type="submit"
+                                                class="btn btn-primary btn-sm"
+                                                hidden={onEditAux !==
+                                                    slotData.id}>✓</button
+                                            >
+
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm {slotData.onAir
+                                                    ? 'btn-danger'
+                                                    : 'btn-success'}"
+                                                disabled={slotData.onAir}
+                                                on:click|preventDefault={() =>
+                                                    setOnAirAuxiliary(slotData)}
+                                            >
+                                                {slotData.onAir
+                                                    ? "EN USO"
+                                                    : "USAR"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            {/each}
                         </div>
                     </div>
 
                     <!-- ****AGREGAR NUEVO ZOCALO**** -->
-                    <div class="card bg-dark border-secondary mb-2">
+                    <h6 class="text-white mb-2 ms-1">AGREGAR ZOCALO</h6>
+                    <div class="card bg-dark border-secondary mb-3">
                         <div class="card-body p-2">
                             <form class="row gy-1 gx-1 align-items-center">
                                 <div class="col-auto">
@@ -254,9 +325,11 @@
                         </div>
                     </div>
 
+                    <!-- ****LISTA DE ZOCALOS**** -->
+                    <h6 class="text-white mb-2 ms-1">LISTA DE ZOCALOS</h6>
                     <div
                         class="zocalos-list p-1"
-                        style="max-height: 60vh; overflow-y: auto;"
+                        style="max-height: 50vh; overflow-y: auto;"
                     >
                         {#each currentZocalos as zocalo, i}
                             <form
@@ -303,8 +376,8 @@
                                         type="button"
                                         class="btn btn-outline-danger btn-sm border-0"
                                         disabled={zocalo.onAir &&
-                                            editingProgramId ===
-                                                activeProgramId}
+                                            Number(editingProgramId) ===
+                                                Number(activeProgramId)}
                                         hidden={zocalo.id === onEdit}
                                         on:click|preventDefault={() =>
                                             deleteZocalo(zocalo)}>🗑</button
