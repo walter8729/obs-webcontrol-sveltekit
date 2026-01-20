@@ -1,6 +1,10 @@
 import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ resolve, event }) => {
+  if (event.url.pathname === '/.well-known/appspecific/com.chrome.devtools.json') {
+    return new Response(null, { status: 404 });
+  }
+
   const response = await resolve(event);
 
   // Apply CORS header for API routes
