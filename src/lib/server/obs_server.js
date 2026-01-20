@@ -196,6 +196,10 @@ export async function initWS(io) {
                         await updateState();
                         break;
                     case 'setOnAirZocalo':
+                        if (data.program_id && data.program_id !== state.activeProgramId) {
+                            console.log(`Auto-switching active program to ${data.program_id}`);
+                            await setActiveProgram(data.program_id);
+                        }
                         await setOnAirZocalo(data.id, data.program_id || state.activeProgramId);
                         await updateState();
                         break;

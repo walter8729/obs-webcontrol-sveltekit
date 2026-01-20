@@ -8,14 +8,20 @@
     $: allZocalosDinamicos = $obsState.zocalosDinamicos || [];
     $: programs = $obsState.programs || [];
     $: activeProgramId = $obsState.activeProgramId;
+    $: activeProgramName =
+        programs.find((p) => p.id === activeProgramId)?.name || "DESCONOCIDO";
 
     // local state for simultaneous editing
     let editingProgramId = null;
-    let newProgramName = "";
 
-    // Initialize editingProgramId if not set
-    $: if (editingProgramId === null && activeProgramId) {
-        editingProgramId = activeProgramId;
+    // Initialize editingProgramId if not set, prefer active or first available
+    $: if (editingProgramId === null && programs.length > 0) {
+        // If active program exists, default to it, otherwise first one
+        if (activeProgramId) {
+            editingProgramId = activeProgramId;
+        } else {
+            editingProgramId = programs[0].id;
+        }
     }
 
     // Filtered data for the CURRENT VIEW
@@ -110,13 +116,14 @@
     }
 
     async function setOnAirZocalo(zocalo) {
+        // Backend handles auto-switching active program if needed
         wsSendCommand("setOnAirZocalo", {
             id: zocalo.id,
             program_id: editingProgramId,
         });
         showInfo({
             type: "success",
-            text: `ZOCALO SELECCIONADO EN ESTE PROGRAMA: ${zocalo.f1}`,
+            text: `ZOCALO SELECCIONADO: ${zocalo.f1}`,
         });
     }
 
@@ -132,124 +139,48 @@
             text: "ACTUALIZASTE EL ZOCALO AUXILIAR",
         });
     }
-
-    function createProgram() {
-        if (!newProgramName) return;
-        wsSendCommand("addProgram", { name: newProgramName.toUpperCase() });
-        newProgramName = "";
-    }
-
-    function removeProgram(id, name) {
-        if (confirm(`¿Eliminar programa "${name}" y todos sus zocalos?`)) {
-            wsSendCommand("deleteProgram", { id });
-            if (editingProgramId === id) editingProgramId = programs[0].id;
-        }
-    }
-
-    function setLive(id) {
-        wsSendCommand("setActiveProgram", { id });
-        showInfo({ type: "warning", text: "PROGRAMA EN VIVO CAMBIADO" });
-    }
 </script>
 
 <div class="container-fluid">
     <div class="row">
-        <!-- Sidebar Programas -->
-        <div class="col-md-3">
-            <div class="card bg-dark text-white mt-1">
-                <div
-                    class="card-header p-2 d-flex justify-content-between align-items-center"
-                >
-                    <h6 class="m-0">GESTIÓN DE PROGRAMAS</h6>
-                </div>
-                <div class="card-body p-2">
-                    <div class="input-group input-group-sm mb-3">
-                        <input
-                            type="text"
-                            class="form-control bg-secondary text-white border-0"
-                            placeholder="Nuevo..."
-                            bind:value={newProgramName}
-                        />
-                        <button
-                            class="btn btn-info"
-                            type="button"
-                            on:click={createProgram}>+</button
-                        >
-                    </div>
-
-                    <div
-                        class="list-group list-group-flush"
-                        style="font-size: 0.9rem;"
-                    >
-                        {#each programs as prog}
-                            <div
-                                class="list-group-item bg-dark border-secondary p-1"
-                            >
-                                <div
-                                    class="d-flex justify-content-between align-items-center mb-1"
-                                >
-                                    <button
-                                        class="btn btn-sm text-start flex-grow-1 {prog.id ===
-                                        editingProgramId
-                                            ? 'btn-info'
-                                            : 'btn-outline-secondary text-white'}"
-                                        on:click={() =>
-                                            (editingProgramId = prog.id)}
-                                    >
-                                        {prog.id === editingProgramId
-                                            ? "👁 "
-                                            : ""}{prog.name}
-                                    </button>
-                                    {#if programs.length > 1}
-                                        <button
-                                            class="btn btn-sm btn-link text-danger p-0 ms-2"
-                                            on:click={() =>
-                                                removeProgram(
-                                                    prog.id,
-                                                    prog.name,
-                                                )}>×</button
-                                        >
-                                    {/if}
-                                </div>
-                                <div class="d-flex gap-1 mt-1">
-                                    {#if prog.id === activeProgramId}
-                                        <span class="badge bg-danger w-100 py-1"
-                                            >🔴 EN VIVO</span
-                                        >
-                                    {:else}
-                                        <button
-                                            class="btn btn-dark btn-sm w-100 border-secondary py-0"
-                                            on:click={() => setLive(prog.id)}
-                                            >VOLVER VIVO</button
-                                        >
-                                    {/if}
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                    <div class="mt-2 small text-muted">
-                        * Puedes editar cualquier programa sin afectar el que
-                        está EN VIVO. El programa EN VIVO es el que escribe los
-                        archivos .txt para OBS.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Zocalos Area -->
-        <div class="col-md-9">
+        <!-- Zocalos Area: Using full width now -->
+        <div class="col-md-12">
             <div class="card bg-secondary mt-1">
                 <div
-                    class="card-header text-white p-2 d-flex justify-content-between align-items-center"
+                    class="card-header text-white p-2 d-flex justify-content-between align-items-center gap-3"
                 >
-                    <h5 class="m-0">
-                        EDITANDO: {programs.find(
-                            (p) => p.id === editingProgramId,
-                        )?.name || "..."}
-                    </h5>
-                    {#if editingProgramId === activeProgramId}
-                        <span class="badge bg-danger blink">ESTÁ AL AIRE</span>
-                    {/if}
+                    <!-- Program Selector -->
+                    <div class="d-flex align-items-center flex-grow-1">
+                        <label for="programSelect" class="me-2 text-nowrap"
+                            >EDITANDO:</label
+                        >
+                        <select
+                            id="programSelect"
+                            class="form-select form-select-sm bg-dark text-white border-secondary fw-bold"
+                            bind:value={editingProgramId}
+                        >
+                            {#each programs as prog}
+                                <option value={prog.id}>{prog.name}</option>
+                            {/each}
+                        </select>
+                    </div>
+
+                    <!-- Status Badge -->
+                    <div class="text-end">
+                        {#if editingProgramId === activeProgramId}
+                            <span
+                                class="badge bg-danger blink fs-6 border border-light"
+                            >
+                                ESTA AL AIRE: {activeProgramName}
+                            </span>
+                        {:else}
+                            <span
+                                class="badge bg-dark text-secondary border border-secondary"
+                            >
+                                ESTA AL AIRE: {activeProgramName}
+                            </span>
+                        {/if}
+                    </div>
                 </div>
 
                 <div class="card-body p-2 bg-dark">
