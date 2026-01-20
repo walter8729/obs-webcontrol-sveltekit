@@ -25,10 +25,11 @@
 
     function createProgram() {
         if (!newProgramName.trim()) return;
-        wsSendCommand("addProgram", { name: newProgramName.toUpperCase() });
+        const nameUpper = newProgramName.toUpperCase();
+        wsSendCommand("addProgram", { name: nameUpper });
         showInfo({
             type: "success",
-            text: `PROGRAMA CREADO: ${newProgramName.toUpperCase()}`,
+            text: `PROGRAMA CREADO: ${nameUpper}`,
         });
         newProgramName = "";
     }
@@ -54,11 +55,15 @@
 
     function saveEdit() {
         if (!editNameContent.trim()) return;
+        const editUpper = editNameContent.toUpperCase();
         wsSendCommand("updateProgram", {
             id: editingId,
-            name: editNameContent.toUpperCase(),
+            name: editUpper,
         });
-        showInfo({ type: "primary", text: "PROGRAMA ACTUALIZADO" });
+        showInfo({
+            type: "primary",
+            text: `PROGRAMA ACTUALIZADO: ${editUpper}`,
+        });
         editingId = null;
     }
 </script>

@@ -72,8 +72,9 @@
 
     async function addZocalo(f1Text, f2Text) {
         // Permitir vacios como pidió el usuario
+        const f1Upper = (f1Text || "").toUpperCase();
         wsSendCommand("addZocalo", {
-            f1: (f1Text || "").toUpperCase(),
+            f1: f1Upper,
             f2: (f2Text || "").toUpperCase(),
             onAir: false,
             program_id: Number(editingProgramId),
@@ -81,7 +82,7 @@
         resetAddForm();
         showInfo({
             type: "info",
-            text: `ZOCALO AGREGADO`,
+            text: `ZOCALO AGREGADO: ${f1Upper || "SIN TITULO"}`,
         });
     }
 
@@ -98,7 +99,7 @@
         wsSendCommand("deleteZocalo", { id: zocalo.id });
         showInfo({
             type: "danger",
-            text: `ELIMINASTE EL ZOCALO`,
+            text: `ELIMINASTE EL ZOCALO: ${zocalo.f1 || "SIN TITULO"}`,
         });
     }
 
@@ -116,7 +117,10 @@
             onAir: zocalo.onAir,
         });
         onEdit = 0;
-        showInfo({ type: "primary", text: `ACTUALIZASTE EL ZOCALO` });
+        showInfo({
+            type: "primary",
+            text: `ACTUALIZASTE EL ZOCALO: ${newF1 || "SIN TITULO"}`,
+        });
     }
 
     async function setOnAirZocalo(zocalo) {
@@ -126,7 +130,7 @@
         });
         showInfo({
             type: "success",
-            text: `ZOCALO AL AIRE`,
+            text: `ZOCALO AL AIRE: ${zocalo.f1 || "SIN TITULO"}`,
         });
     }
 
@@ -142,7 +146,7 @@
         onEditAux = 0;
         showInfo({
             type: "primary",
-            text: `ACTUALIZASTE AUXILIAR ${slotData.slot}`,
+            text: `ACTUALIZASTE AUXILIAR ${slotData.slot}: ${newF3 || "VACIO"}`,
         });
     }
 
@@ -153,7 +157,7 @@
         });
         showInfo({
             type: "success",
-            text: `AUXILIAR ${slotData.slot} EN USO`,
+            text: `AUXILIAR ${slotData.slot} EN USO: ${slotData.f3 || "VACIO"}`,
         });
     }
 
