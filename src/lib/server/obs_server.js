@@ -88,9 +88,31 @@ async function startScreenshotLoop() {
     }, 1000);
 }
 
+async function startMediaStatusLoop() {
+    setInterval(async () => {
+        if (!connected) return;
+        try {
+            const status = await obs.call('GetMediaInputStatus', { inputName: 'playout' });
+            broadcast('playoutStatus', {
+                currentMs: status.mediaCursor,
+                durationMs: status.mediaDuration,
+                state: status.mediaState,
+                file: '' // We could get this from settings if needed
+            });
+        } catch (e) {
+            // Probably source 'playout' doesn't exist yet or is not a media source
+        }
+    }, 500);
+}
+
 if (!globalThis.screenshotLoopStarted) {
     startScreenshotLoop();
     globalThis.screenshotLoopStarted = true;
+}
+
+if (!globalThis.mediaStatusLoopStarted) {
+    startMediaStatusLoop();
+    globalThis.mediaStatusLoopStarted = true;
 }
 
 function scheduleReconnect() {
@@ -229,6 +251,32 @@ export async function initWS(io) {
                     case 'updateProgram':
                         await updateProgram(data.id, data.name);
                         await updateState();
+                        break;
+                    case 'playoutAction':
+                        await obs.call('TriggerMediaInputAction', {
+                            inputName: 'playout',
+                            mediaAction: `OBS_WEBSOCKET_MEDIA_INPUT_ACTION_${data.action}`
+                        });
+                        break;
+                    case 'playoutSeek':
+                        await obs.call('SetMediaInputCursor', {
+                            inputName: 'playout',
+                            mediaCursor: data.ms
+                        });
+                        break;
+                    case 'playoutSetFile':
+                        await obs.call('SetInputSettings', {
+                            inputName: 'playout',
+                            inputSettings: { local_file: data.path },
+                            overlay: true
+                        });
+                        break;
+                    case 'playoutSetSpeed':
+                        await obs.call('SetInputSettings', {
+                            inputName: 'playout',
+                            inputSettings: { speed_percent: data.speed },
+                            overlay: true
+                        });
                         break;
                 }
             } catch (e) {

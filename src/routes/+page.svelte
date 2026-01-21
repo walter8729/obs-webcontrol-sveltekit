@@ -6,6 +6,8 @@
     import SceneSelector from "./SceneSelector.svelte";
     import SceneItemSelector from "./SceneItemSelector.svelte";
     import InfoPill from "./InfoPill.svelte";
+    import Playlist from "$lib/components/Playout/Playlist.svelte";
+    import Controls from "$lib/components/Playout/Controls.svelte";
     import {
         obsState,
         obsConnected,
@@ -89,7 +91,33 @@
                 {/if}
             </div>
             <div class="col-md-8 aling-content-start">
-                <Zocalos bind:infoPillData />
+                <div class="row g-2">
+                    <div class="col-12 col-xl-6">
+                        <Zocalos bind:infoPillData />
+                    </div>
+                    <div class="col-12 col-xl-6">
+                        <div class="card bg-dark mt-1">
+                            <div
+                                class="card-header text-white d-flex justify-content-between"
+                            >
+                                <span>PLAYOUT RÁPIDO</span>
+                                <a
+                                    href="/playout"
+                                    class="btn btn-sm btn-outline-info py-0"
+                                    >Abrir Panel Full</a
+                                >
+                            </div>
+                            <div class="card-body p-1">
+                                <Controls />
+                                <div
+                                    style="max-height: 300px; overflow-y: auto;"
+                                >
+                                    <Playlist />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

@@ -35,6 +35,13 @@ export function initWebSocket() {
         obsConnected.set(connected);
     });
 
+    socket.on('playoutStatus', (status) => {
+        // We import playoutStore dynamically to avoid circular dependencies if any
+        import('./playoutStore').then(m => {
+            m.playoutStore.updateStatus(status);
+        });
+    });
+
     socket.on('disconnect', () => {
         console.log('Disconnected from Backend WebSocket');
         obsConnected.set(false);

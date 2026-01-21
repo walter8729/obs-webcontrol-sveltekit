@@ -45,6 +45,9 @@
           <a class="nav-link" href="/zocalos">Zocalos</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" href="/playout">Playout</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" href="/programs">Programas</a>
         </li>
         <li class="nav-item">
