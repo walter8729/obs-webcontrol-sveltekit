@@ -75,8 +75,8 @@ async function startScreenshotLoop() {
             const data = await obs.call('GetSourceScreenshot', {
                 sourceName: state.programScene,
                 imageFormat: 'jpg',
-                imageWidth: 854,
-                imageHeight: 480,
+                imageWidth: 640,
+                imageHeight: 360,
                 imageCompressionQuality: -1
             });
             if (data && data.imageData) {
@@ -85,7 +85,7 @@ async function startScreenshotLoop() {
         } catch (e) {
             // Silently fail screenshots
         }
-    }, 1000);
+    }, 200);
 }
 
 async function startMediaStatusLoop() {
