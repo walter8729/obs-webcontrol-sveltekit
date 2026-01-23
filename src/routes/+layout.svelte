@@ -1,15 +1,21 @@
 <script>
-  // export let data;
+  /**
+   * Layout principal de la aplicación.
+   * Se encarga de la navegación global, el estado de la conexión OBS
+   * y la visualización de la hora actual.
+   */
   import "../app.scss";
   import { onMount } from "svelte";
-  import { initWebSocket, obsConnected } from "$lib/obs_store";
+  import { initWebSocket, obsConnected } from "$lib/stores/obs.js";
 
+  /** @type {string} Nombre del usuario actual */
   let user = "desconocido";
 
-  $: hora = "";
+  /** @type {string} Cadena formateada con la fecha y hora actual */
+  let hora = "";
 
+  // Intervalo para actualizar la hora cada segundo
   setInterval(() => {
-    // hora = new Date();
     hora = new Intl.DateTimeFormat("es-ES", {
       dateStyle: "long",
       timeStyle: "medium",
@@ -18,7 +24,9 @@
       .toLocaleUpperCase();
   }, 1000);
 
-  onMount(() => {
+  onMount(async () => {
+    // Importar Bootstrap JS de forma dinámica para soporte offline total (solo cliente)
+    await import("bootstrap/dist/js/bootstrap.bundle.min.js");
     initWebSocket();
   });
 </script>

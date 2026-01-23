@@ -1,24 +1,50 @@
 import OBSWebSocket from 'obs-websocket-js';
 import { OBS_ADDRESS, OBS_PASSWORD } from '../config.js';
-import { getAllZocalos, setOnAirZocalo, addZocalo, deleteZocalo, updateZocalo, getAllPrograms, getActiveProgram, setActiveProgram, addProgram, deleteProgram, getZocaloDinamico, updateZocaloDinamico, getAllZocalosGlobal, getAllZocalosDinamicosGlobal, updateProgram, setOnAirAuxiliary, getPlaylist, addToPlaylist, removeFromPlaylist, clearPlaylist, updatePlaylistSortOrder, updatePlaylistItemStatus, setAllItemsIdle, getPlayoutSettings, updatePlayoutSetting } from '../../db.mjs';
-import { readZocaloDinamicoFromFile, writeZocaloToFile, writeZocaloDinamicoToFile } from '../../file.js';
+import {
+    getAllZocalos, setOnAirZocalo, addZocalo, deleteZocalo, updateZocalo,
+    getAllPrograms, getActiveProgram, setActiveProgram, addProgram,
+    deleteProgram, getZocaloDinamico, updateZocaloDinamico,
+    getAllZocalosGlobal, getAllZocalosDinamicosGlobal, updateProgram,
+    setOnAirAuxiliary, getPlaylist, addToPlaylist, removeFromPlaylist,
+    clearPlaylist, updatePlaylistSortOrder, updatePlaylistItemStatus,
+    setAllItemsIdle, getPlayoutSettings, updatePlayoutSetting
+} from './db.js';
+import { writeZocaloToFile, writeZocaloDinamicoToFile } from '../../file.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
+/**
+ * @file obs.js
+ * @description Servidor central de control para OBS.
+ * Gestiona la conexión WebSocket con OBS, la sincronización de estados,
+ * el sistema de playout multimedia y la comunicación en tiempo real vía Socket.io.
+ */
+
 const execPromise = promisify(exec);
 
+// Instancia global de la conexión con OBS
 export const obs = new OBSWebSocket();
+
 let connected = false;
 let connecting = false;
 let reconnectTimeout = null;
 
+/**
+ * Bandera para detectar si el usuario ha detenido la reproducción manualmente.
+ * Esto evita que el sistema salte al siguiente clip automáticamente cuando se presiona STOP.
+ */
+let manualStop = false;
+
+/**
+ * Estado global del sistema sincronizado con la base de datos y OBS.
+ */
 let state = {
     scenes: [],
     programScene: '',
     previewScene: '',
     programSceneItemList: [],
-    zocalos: [], // All zocalos
-    zocalosDinamicos: [], // All F3s
+    zocalos: [],
+    zocalosDinamicos: [],
     programs: [],
     activeProgramId: 1,
     playout: {
@@ -33,31 +59,40 @@ let state = {
     }
 };
 
+/**
+ * Obtiene la duración de un archivo multimedia usando ffprobe.
+ * @param {string} path Ruta absoluta del archivo.
+ * @returns {Promise<number>} Duración en segundos.
+ */
 async function getMediaDuration(path) {
-    // Images default to 10s
     const ext = path.split('.').pop().toLowerCase();
     const imageExts = ['png', 'jpg', 'jpeg', 'bmp', 'tga', 'gif', 'webp', 'svg', 'tiff', 'tif', 'exr', 'hdr', 'psd', 'ico', 'pbm', 'pgm', 'ppm', 'xbm', 'xpm', 'dds'];
+
+    // Las imágenes tienen una duración fija de 10 segundos por defecto
     if (imageExts.includes(ext)) return 10;
 
     try {
         const { stdout } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${path}"`);
         return parseFloat(stdout) || 0;
     } catch (e) {
-        console.error('Error getting duration with ffprobe:', e.message);
+        console.error('Error al obtener duración con ffprobe:', e.message);
         return 0;
     }
 }
 
+/**
+ * Actualiza el estado global consultando la base de datos y OBS.
+ * Emite el evento 'state' a todos los clientes conectados.
+ */
 async function updateState() {
     try {
-        // Fetch everything
         const activeProgram = await getActiveProgram();
         state.activeProgramId = activeProgram.id;
         state.programs = await getAllPrograms();
         state.zocalos = await getAllZocalosGlobal();
         state.zocalosDinamicos = await getAllZocalosDinamicosGlobal();
 
-        // Update Files based on GLOBAL "on air" status
+        // Sincronización de zócalos al aire con archivos físicos para OBS (F1, F2, F3)
         const onAirZocalo = state.zocalos.find(z => Number(z.onAir) === 1);
         const activeF3Slot = state.zocalosDinamicos.find(z => Number(z.onAir) === 1);
 
@@ -69,7 +104,7 @@ async function updateState() {
             await writeZocaloDinamicoToFile("");
         }
 
-        // Update OBS specific state if connected
+        // Si OBS está conectado, obtenemos escenas y fuentes
         if (connected) {
             const sceneList = await obs.call('GetSceneList');
             state.scenes = sceneList.scenes.slice().reverse();
@@ -85,22 +120,28 @@ async function updateState() {
             state.programSceneItemList = [];
         }
 
-        // Fetch playout state
+        // Cargar playlist y configuraciones de la BD
         state.playout.playlist = await getPlaylist();
         state.playout.settings = await getPlayoutSettings();
 
         broadcast('state', state);
     } catch (e) {
-        console.error('Error updating state:', e.message);
+        console.error('Error al actualizar estado:', e.message);
     }
 }
 
+/**
+ * Envía un evento a todos los clientes a través de Socket.io.
+ */
 function broadcast(event, data) {
     if (globalThis.io) {
         globalThis.io.emit(event, data);
     }
 }
 
+/**
+ * Inicia el loop de capturas de pantalla de la escena de programa.
+ */
 async function startScreenshotLoop() {
     setInterval(async () => {
         if (!connected || !state.programScene) return;
@@ -115,20 +156,22 @@ async function startScreenshotLoop() {
             if (data && data.imageData) {
                 broadcast('screenshot', data.imageData);
             }
-        } catch (e) {
-            // Silently fail screenshots
-        }
+        } catch (e) { }
     }, 200);
 }
 
+/**
+ * Inicia el loop de monitoreo del estado de reproducción multimedia.
+ * Gestiona el Loop A-B en el lado del servidor.
+ */
 async function startMediaStatusLoop() {
     setInterval(async () => {
         if (!connected) return;
         try {
             const status = await obs.call('GetMediaInputStatus', { inputName: 'playout' });
 
-            // Loop A-B enforcement (Server-side)
             const settings = state.playout.settings;
+            // Lógica de mantenimiento del Loop A-B
             if (settings &&
                 settings.loopABActive &&
                 status.mediaState === 'OBS_MEDIA_STATE_PLAYING' &&
@@ -139,7 +182,6 @@ async function startMediaStatusLoop() {
                     inputName: 'playout',
                     mediaCursor: Number(settings.loopABStart)
                 });
-                // Update local status immediately for smoother UI
                 status.mediaCursor = Number(settings.loopABStart);
             }
 
@@ -150,12 +192,13 @@ async function startMediaStatusLoop() {
                 file: ''
             };
             broadcast('playoutStatus', state.playout.status);
-        } catch (e) {
-            // Probably source 'playout' doesn't exist yet
-        }
+        } catch (e) { }
     }, 500);
 }
 
+/**
+ * Gestiona la transición automática al siguiente clip cuando finaliza el actual.
+ */
 async function handleAutoNext() {
     if (!state.playout.settings.autoNext) return;
 
@@ -182,26 +225,39 @@ async function handleAutoNext() {
     }
 }
 
+/**
+ * Carga y reproduce un elemento de la lista en OBS.
+ * @param {Object} item Elemento de la playlist.
+ */
 async function playItem(item) {
     if (!connected) return;
 
-    // Set file in OBS
+    // Importante: Resetear bandera de stop manual al iniciar nueva reproducción
+    manualStop = false;
+
+    // Configurar archivo en OBS - Siempre reseteamos velocidad a 100% para clips nuevos
     await obs.call('SetInputSettings', {
         inputName: 'playout',
-        inputSettings: { local_file: item.path, looping: state.playout.settings.loopFile },
+        inputSettings: {
+            local_file: item.path,
+            looping: state.playout.settings.loopFile,
+            speed_percent: 100
+        },
         overlay: true
     });
 
-    // Explicitly trigger restart to ensure it plays from beginning
+    // Forzar reinicio para asegurar que empiece desde el segundo 0
     await obs.call('TriggerMediaInputAction', {
         inputName: 'playout',
         mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
     });
 
-    // Update DB statuses
+    // Actualizar estados en BD
     await updatePlaylistItemStatus(item.id, 'playing');
+    await updatePlayoutSetting('speed', 100);
+    state.playout.settings.speed = 100;
 
-    // Determine next item
+    // Identificar el siguiente clip para pre-marcarlo en UI
     const playlist = await getPlaylist();
     const idx = playlist.findIndex(i => i.id === item.id);
     let nextIdx = idx + 1;
@@ -216,6 +272,7 @@ async function playItem(item) {
     await updateState();
 }
 
+// Inicialización de loops de monitoreo (evitando duplicados en HMR)
 if (!globalThis.screenshotLoopStarted) {
     startScreenshotLoop();
     globalThis.screenshotLoopStarted = true;
@@ -226,20 +283,25 @@ if (!globalThis.mediaStatusLoopStarted) {
     globalThis.mediaStatusLoopStarted = true;
 }
 
+/**
+ * Programa un reintento de conexión con OBS.
+ */
 function scheduleReconnect() {
     if (reconnectTimeout) return;
-    console.log('Scheduling OBS reconnect in 5s...');
+    console.log('Programando reconexión con OBS en 5s...');
     reconnectTimeout = setTimeout(() => {
         reconnectTimeout = null;
         connectOBS();
     }, 5000);
 }
 
+/**
+ * Intenta conectar con el WebSocket de OBS.
+ */
 export async function connectOBS() {
     if (connecting || connected) return;
-
     connecting = true;
-    console.log('Connecting to OBS:', OBS_ADDRESS);
+    console.log('Conectando a OBS en:', OBS_ADDRESS);
 
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
@@ -248,19 +310,17 @@ export async function connectOBS() {
 
     try {
         await obs.connect(OBS_ADDRESS, OBS_PASSWORD);
-        // On success, Identified will fire
     } catch (e) {
-        console.error('OBS Connection Error:', e.message);
+        console.error('Error de conexión OBS:', e.message);
         connected = false;
         connecting = false;
         scheduleReconnect();
     }
 }
 
-// Clear any existing listeners to prevent duplication on HMR
-obs.removeAllListeners('ConnectionClosed');
-obs.removeAllListeners('Identified');
+// --- GESTIÓN DE EVENTOS DE CONEXIÓN ---
 
+obs.removeAllListeners('ConnectionClosed');
 obs.on('ConnectionClosed', () => {
     if (connected || connecting) {
         const wasConnected = connected;
@@ -268,29 +328,38 @@ obs.on('ConnectionClosed', () => {
         connecting = false;
         if (wasConnected) {
             broadcast('connected', false);
-            console.log('OBS Connection Closed');
+            console.log('Conexión con OBS cerrada');
         }
         scheduleReconnect();
     }
 });
 
+obs.removeAllListeners('Identified');
 obs.on('Identified', () => {
     connected = true;
     connecting = false;
     broadcast('connected', true);
-    console.log('OBS Connected and Identified');
+    console.log('OBS Conectado e Identificado');
     updateState();
 });
+
+// --- GESTIÓN DE FINALIZACIÓN DE CLIPS ---
 
 obs.removeAllListeners('MediaInputPlaybackEnded');
 obs.on('MediaInputPlaybackEnded', async (data) => {
     if (data.inputName === 'playout') {
-        console.log('Playout media ended, handling auto-next...');
+        // Si fue un STOP manual, NO saltamos al siguiente
+        if (manualStop) {
+            console.log('Playout detenido manualmente, omitiendo auto-next.');
+            manualStop = false;
+            return;
+        }
+        console.log('Fin de clip detectado, ejecutando auto-next...');
         await handleAutoNext();
     }
 });
 
-// Event Handlers
+// Eventos de cambio en la estructura de OBS
 const events = [
     'SceneListChanged', 'SceneCreated', 'SceneRemoved', 'SceneNameChanged',
     'CurrentProgramSceneChanged', 'CurrentPreviewSceneChanged',
@@ -304,17 +373,21 @@ events.forEach(event => {
     });
 });
 
+/**
+ * Inicializa los eventos de Socket.io para la comunicación con el frontend.
+ * @param {Object} io Instancia de Socket.io.
+ */
 export async function initWS(io) {
     if (globalThis.wsInitialized) return;
     globalThis.wsInitialized = true;
 
     io.on('connection', (socket) => {
-        // Send initial state
+        // Enviar estado inicial al nuevo cliente
         socket.emit('state', state);
         socket.emit('connected', connected);
 
         socket.on('command', async ({ type, data }) => {
-            console.log('Received command:', type, data);
+            console.log('Comando recibido:', type, data);
             try {
                 switch (type) {
                     case 'switchScene':
@@ -341,7 +414,6 @@ export async function initWS(io) {
                         break;
                     case 'setOnAirZocalo':
                         if (data.program_id && Number(data.program_id) !== Number(state.activeProgramId)) {
-                            console.log(`Auto-switching active program to ${data.program_id}`);
                             await setActiveProgram(data.program_id);
                         }
                         await setOnAirZocalo(data.id);
@@ -377,7 +449,6 @@ export async function initWS(io) {
                             if (currentItem) {
                                 await playItem(currentItem);
                             } else {
-                                // Fallback if no item marked as playing
                                 await obs.call('TriggerMediaInputAction', {
                                     inputName: 'playout',
                                     mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
@@ -393,7 +464,18 @@ export async function initWS(io) {
                                     mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY'
                                 });
                             }
+                        } else if (data.action === 'STOP') {
+                            // Marcar parada manual para evitar auto-next
+                            manualStop = true;
+                            await obs.call('TriggerMediaInputAction', {
+                                inputName: 'playout',
+                                mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP'
+                            });
                         } else {
+                            // Si es PLAY o RESTART manual, reseteamos la bandera de stop
+                            if (data.action === 'PLAY' || data.action === 'RESTART') {
+                                manualStop = false;
+                            }
                             await obs.call('TriggerMediaInputAction', {
                                 inputName: 'playout',
                                 mediaAction: `OBS_WEBSOCKET_MEDIA_INPUT_ACTION_${data.action}`
@@ -407,12 +489,10 @@ export async function initWS(io) {
                         });
                         break;
                     case 'playoutSetFile':
-                        // If data.id is provided, we use the item from playlist
                         if (data.id) {
                             const item = state.playout.playlist.find(i => i.id === data.id);
                             if (item) await playItem(item);
                         } else if (data.path) {
-                            // Direct path play (not in playlist)
                             await obs.call('SetInputSettings', {
                                 inputName: 'playout',
                                 inputSettings: { local_file: data.path },
@@ -427,7 +507,12 @@ export async function initWS(io) {
                     case 'playoutSetSpeed':
                         try {
                             const status = await obs.call('GetMediaInputStatus', { inputName: 'playout' });
-                            const currentCursor = status.mediaCursor;
+
+                            // Preferir el cursor enviado desde el frontend (capturado al iniciar el drag)
+                            // de lo contrario usar el cursor actual de OBS
+                            const targetCursor = (data.seekMs !== undefined && data.seekMs !== null)
+                                ? data.seekMs
+                                : status.mediaCursor;
 
                             await obs.call('SetInputSettings', {
                                 inputName: 'playout',
@@ -435,27 +520,26 @@ export async function initWS(io) {
                                 overlay: true
                             });
 
-                            // Restore cursor to avoid starting from 0
-                            if (status.mediaState === 'OBS_MEDIA_STATE_PLAYING') {
-                                await obs.call('SetMediaInputCursor', {
-                                    inputName: 'playout',
-                                    mediaCursor: currentCursor
-                                });
-                            }
+                            // Restaurar el cursor inmediatamente después de cambiar la velocidad
+                            await obs.call('SetMediaInputCursor', {
+                                inputName: 'playout',
+                                mediaCursor: targetCursor
+                            });
                         } catch (e) {
-                            console.error('Error updating speed:', e.message);
+                            console.error('Error al actualizar velocidad:', e.message);
                         }
                         await updatePlayoutSetting('speed', data.speed);
+                        // Asegurar sincronización del estado interno
+                        state.playout.settings.speed = data.speed;
                         break;
                     case 'playoutAddToPlaylist':
                         const duration = await getMediaDuration(data.path);
                         const newItemId = await addToPlaylist({
                             name: data.name,
                             path: data.path,
-                            duration: Math.round(duration * 1000) // to ms
+                            duration: Math.round(duration * 1000)
                         });
 
-                        // If playlist was empty, mark as next
                         const currentPlaylist = await getPlaylist();
                         if (currentPlaylist.length === 1) {
                             await updatePlaylistItemStatus(newItemId, 'next');
@@ -473,7 +557,6 @@ export async function initWS(io) {
                     case 'playoutUpdateSettings':
                         await updatePlayoutSetting(data.key, data.value);
 
-                        // If loopFile changed, update OBS immediately
                         if (data.key === 'loopFile') {
                             await obs.call('SetInputSettings', {
                                 inputName: 'playout',
@@ -481,14 +564,11 @@ export async function initWS(io) {
                                 overlay: true
                             });
                         }
-                        // If stopAfterCurrent turned ON, clear next
                         if (data.key === 'stopAfterCurrent' && data.value === true) {
-                            await setAllItemsIdle(); // Or just clear 'next'
-                            // Re-set playing if any
+                            await setAllItemsIdle();
                             const playing = state.playout.playlist.find(i => i.status === 'playing');
                             if (playing) await updatePlaylistItemStatus(playing.id, 'playing');
                         }
-
                         await updateState();
                         break;
                     case 'playoutSetLoopAB':
@@ -498,7 +578,6 @@ export async function initWS(io) {
                         await updateState();
                         break;
                     case 'playoutReorder':
-                        // data.orders is an array of {id, sort_order}
                         for (const item of data.orders) {
                             await updatePlaylistSortOrder(item.id, item.sort_order);
                         }
@@ -506,11 +585,11 @@ export async function initWS(io) {
                         break;
                 }
             } catch (e) {
-                console.error('Error executing OBS command:', e.message);
+                console.error('Error al ejecutar comando OBS:', e.message);
             }
         });
     });
 }
 
-// Initial connection
+// Conexión inicial al arrancar el servidor
 connectOBS();

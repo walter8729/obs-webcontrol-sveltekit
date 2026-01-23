@@ -1,73 +1,70 @@
 <script>
-    import { playoutStore } from "$lib/playoutStore";
+    /**
+     * @file Playlist.svelte
+     * @description Componente de lista de reproducción con soporte para reordenamiento mediante Drag & Drop,
+     * menú contextual y estados visuales para medios "al aire" y "siguiente".
+     */
+    import { playoutStore } from "../../stores/playout.js";
+    import { formatTime } from "../../utils/formatters.js";
     import { flip } from "svelte/animate";
 
+    /** @type {number|null} Índice del elemento que se está arrastrando actualmente */
     let draggingIndex = null;
+
+    /** @type {Object} Estado del menú contextual */
     let contextMenu = { show: false, x: 0, y: 0, index: -1 };
 
+    // Suscripción a la lista de reproducción del store
     $: playlist = $playoutStore.playlist;
 
+    // Cálculo reactivo de la duración total de la lista
     $: totalDurationMs = playlist.reduce(
         (acc, item) => acc + (item.duration || 0),
         0,
     );
 
-    function formatDuration(ms) {
-        if (!ms) return "00:00";
-        const secTotal = Math.floor(ms / 1000);
-        const days = Math.floor(secTotal / 86400);
-        const hours = Math.floor((secTotal % 86400) / 3600);
-        const mins = Math.floor((secTotal % 3600) / 60);
-        const secs = secTotal % 60;
-
-        const hms = `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-
-        if (days > 0) return `${days}d ${hms}`;
-        if (hours > 0) return hms;
-        return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-
-    function formatTotalDuration(ms) {
-        if (!ms) return "00:00";
-        const secTotal = Math.floor(ms / 1000);
-        const days = Math.floor(secTotal / 86400);
-        const hours = Math.floor((secTotal % 86400) / 3600);
-        const mins = Math.floor((secTotal % 3600) / 60);
-        const secs = secTotal % 60;
-
-        const hms = `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-
-        if (days > 0) return `${days}d ${hms}`;
-        if (hours > 0) return hms;
-        return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-
+    /**
+     * Inicia el proceso de arrastre guardando el índice origen.
+     * @param {number} index
+     */
     function handleDragStart(index) {
         draggingIndex = index;
     }
 
+    /**
+     * Gestiona el evento de arrastre sobre otro elemento para permitir el reordenamiento visual.
+     * @param {DragEvent} e
+     * @param {number} index Índice destino.
+     */
     function handleDragOver(e, index) {
         e.preventDefault();
         if (draggingIndex === null || draggingIndex === index) return;
 
-        // Perform local reorder for UI feel, then sync
+        // Clonar lista y realizar reordenamiento local
         const newList = [...playlist];
         const [movedItem] = newList.splice(draggingIndex, 1);
         newList.splice(index, 0, movedItem);
-        // We calculate all orders to simplify backend
+
+        // Mapear nuevos órdenes para persistir en el servidor
         const orders = newList.map((item, idx) => ({
             id: item.id,
             sort_order: idx + 1,
         }));
-        playoutStore.reorderPlaylist(orders);
 
+        playoutStore.reorderPlaylist(orders);
         draggingIndex = index;
     }
 
+    /** Limpia el índice de arrastre al soltar el elemento */
     function handleDrop() {
         draggingIndex = null;
     }
 
+    /**
+     * Muestra el menú contextual en la posición del ratón.
+     * @param {MouseEvent} e
+     * @param {number} index Índice del elemento sobre el que se hace clic derecho.
+     */
     function showContextMenu(e, index) {
         e.preventDefault();
         contextMenu = {
@@ -78,11 +75,16 @@
         };
     }
 
+    /** Cierra el menú contextual */
     function closeContextMenu() {
         contextMenu.show = false;
     }
 
-    function action(type) {
+    /**
+     * Ejecuta una acción desde el menú contextual (play inmediato o marcar como siguiente).
+     * @param {string} type Tipo de acción.
+     */
+    function handleMenuAction(type) {
         const item = playlist[contextMenu.index];
         if (!item) return;
 
@@ -94,25 +96,28 @@
         closeContextMenu();
     }
 
+    /** Reproduce un elemento al hacer doble clic */
     function handleDoubleClick(index) {
         const item = playlist[index];
         playoutStore.setCurrent(item.id);
     }
 </script>
 
+<!-- Contenedor principal de la Playlist -->
 <div
     class="playlist-container card bg-dark text-white h-100 border-secondary"
     on:click={closeContextMenu}
     on:keydown={(e) => e.key === "Escape" && closeContextMenu()}
     role="presentation"
 >
+    <!-- Cabecera con duración total y botón de limpieza -->
     <div
         class="card-header py-2 d-flex justify-content-between align-items-center bg-dark"
     >
-        <h6 class="mb-0 text-light fw-bold">LISTA DE REPRODUCCIÓN</h6>
+        <h6 class="mb-0 text-light fw-bold uppercase">LISTA DE REPRODUCCIÓN</h6>
         <div class="d-flex align-items-center gap-2">
             <span class="small text-muted font-monospace"
-                >{formatTotalDuration(totalDurationMs)}</span
+                >{formatTime(totalDurationMs)}</span
             >
             <button
                 class="btn btn-sm btn-outline-danger py-0 px-2"
@@ -121,13 +126,14 @@
         </div>
     </div>
 
+    <!-- Lista de elementos con scroll -->
     <div
         class="playlist-body overflow-auto flex-grow-1"
         style="max-height: 500px;"
     >
         {#if playlist.length === 0}
             <div class="p-4 text-center text-muted italic">
-                La lista está vacía. Agrega archivos desde el explorador.
+                La lista está vacía. Arrastra archivos desde el explorador.
             </div>
         {:else}
             <div class="list-group list-group-flush">
@@ -145,21 +151,25 @@
                         on:contextmenu={(e) => showContextMenu(e, i)}
                         on:dblclick={() => handleDoubleClick(i)}
                     >
+                        <!-- Índice del elemento en la lista -->
                         <div
                             class="index px-2 text-white-50 small font-monospace"
                         >
                             {(i + 1).toString().padStart(2, "0")}
                         </div>
+                        <!-- Nombre del archivo -->
                         <div
                             class="name flex-grow-1 text-truncate py-2 small ps-1 text-light"
                         >
                             {item.name}
                         </div>
+                        <!-- Duración individual -->
                         <div
                             class="duration px-2 small font-monospace text-white-50"
                         >
-                            {formatDuration(item.duration || 0)}
+                            {formatTime(item.duration || 0)}
                         </div>
+                        <!-- Botón para quitar de la lista -->
                         <button
                             class="btn btn-sm text-danger px-2 border-0 opacity-50 hover-opacity-100"
                             on:click={() =>
@@ -173,13 +183,28 @@
     </div>
 </div>
 
+<!-- Menú Contextual personalizado -->
 {#if contextMenu.show}
     <div
         class="context-menu bg-dark shadow-lg rounded py-1 border border-secondary"
         style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
     >
-        <button on:click={() => action("play")}>Reproducir</button>
-        <button on:click={() => action("next")}>Marcar como Siguiente</button>
+        <button on:click={() => handleMenuAction("play")}>
+            <i class="bi bi-play-fill me-2"></i> Reproducir ahora
+        </button>
+        <button on:click={() => handleMenuAction("next")}>
+            <i class="bi bi-快速forward-fill me-2"></i> Marcar como Siguiente
+        </button>
+        <div class="dropdown-divider border-secondary"></div>
+        <button
+            class="text-danger"
+            on:click={() => {
+                playoutStore.removeFromPlaylist(playlist[contextMenu.index].id);
+                closeContextMenu();
+            }}
+        >
+            <i class="bi bi-trash-fill me-2"></i> Eliminar de lista
+        </button>
     </div>
 {/if}
 
@@ -212,7 +237,6 @@
         opacity: 1 !important;
     }
 
-    /* Colores solicitados y destacados */
     .playing {
         background-color: rgba(0, 123, 255, 0.15) !important;
         border-left: 3px solid #007bff !important;
@@ -237,7 +261,7 @@
     .context-menu {
         position: fixed;
         z-index: 1000;
-        min-width: 160px;
+        min-width: 180px;
     }
     .context-menu button {
         display: block;
@@ -247,11 +271,15 @@
         border: none;
         background: none;
         color: #eee;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         transition: background 0.2s;
     }
     .context-menu button:hover {
         background-color: #333;
         color: white;
+    }
+    .uppercase {
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
 </style>

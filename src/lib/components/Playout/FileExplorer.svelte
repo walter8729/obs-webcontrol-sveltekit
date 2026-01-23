@@ -1,13 +1,31 @@
 <script>
+    /**
+     * @file FileExplorer.svelte
+     * @description Componente para explorar el sistema de archivos local y agregar medios a la playlist.
+     * Permite navegar carpetas, ver archivos compatibles (video, audio, imagen) y arrastrarlos.
+     */
     import { onMount } from "svelte";
-    import { playoutStore } from "$lib/playoutStore";
+    import { playoutStore } from "../../stores/playout.js";
 
+    /** @type {string} Directorio actual en visualización */
     let currentDir = "C:\\";
+
+    /** @type {string} Directorio padre para permitir navegación hacia atrás */
     let parentDir = "";
+
+    /** @type {Array<Object>} Lista de archivos y carpetas en el directorio actual */
     let items = [];
+
+    /** @type {boolean} Estado de carga de la petición API */
     let loading = false;
+
+    /** @type {string|null} Mensaje de error en caso de fallo en la lectura */
     let error = null;
 
+    /**
+     * Carga el contenido de un directorio desde la API del servidor.
+     * @param {string} dir Ruta completa del directorio a cargar.
+     */
     async function loadDir(dir) {
         loading = true;
         error = null;
@@ -22,7 +40,7 @@
             currentDir = data.currentDir;
             parentDir = data.parentDir;
 
-            // Persist current directory
+            // Persistir el último directorio visitado en el navegador
             if (typeof window !== "undefined") {
                 localStorage.setItem("playout_explorer_dir", currentDir);
             }
@@ -33,6 +51,10 @@
         }
     }
 
+    /**
+     * Agrega un archivo compatible a la lista de reproducción global.
+     * @param {Object} item Datos del archivo seleccionado.
+     */
     function addToPlaylist(item) {
         if (
             !item.isDirectory &&
@@ -42,12 +64,18 @@
         }
     }
 
+    /**
+     * Maneja el inicio del arrastre (drag) de un archivo para soltarlo en la playlist.
+     * @param {DragEvent} e
+     * @param {Object} item
+     */
     function handleDragStart(e, item) {
         if (item.isDirectory) return;
         e.dataTransfer.setData("text/plain", JSON.stringify(item));
         e.dataTransfer.effectAllowed = "copy";
     }
 
+    // Al montar el componente, recuperar el último directorio o empezar en C:
     onMount(() => {
         const savedDir = localStorage.getItem("playout_explorer_dir");
         if (savedDir) {
@@ -63,7 +91,9 @@
     <div
         class="card-header d-flex justify-content-between align-items-center py-2 bg-dark"
     >
-        <h6 class="mb-0 text-light fw-bold small uppercase">EXPLORADOR</h6>
+        <h6 class="mb-0 text-light fw-bold small uppercase">
+            EXPLORADOR DE ARCHIVOS
+        </h6>
         <div class="d-flex gap-1">
             <button
                 class="btn btn-sm btn-outline-info py-0 px-2"
@@ -75,11 +105,13 @@
         </div>
     </div>
 
+    <!-- Visualización de la ruta actual -->
     <div class="path-bar p-2 text-truncate small">
         <span class="text-muted">DIR:</span>
         {currentDir}
     </div>
 
+    <!-- Cuerpo del explorador con scroll -->
     <div
         class="list-group list-group-flush overflow-auto flex-grow-1 explorer-body"
         style="max-height: 500px;"
@@ -89,7 +121,7 @@
                 class="list-group-item list-group-item-action bg-dark text-info py-1 small border-secondary d-flex align-items-center"
                 on:click={() => loadDir(parentDir)}
             >
-                <i class="bi bi-folder-symlink me-2"></i> .. (Subir)
+                <i class="bi bi-folder-symlink me-2"></i> .. (Subir nivel)
             </button>
         {/if}
 
@@ -143,6 +175,7 @@
                     <span class="text-truncate file-name">{item.name}</span>
                 </button>
 
+                <!-- Botón rápido para agregar a la playlist (se muestra al hacer hover) -->
                 {#if !item.isDirectory && (item.isVideo || item.isAudio || item.isImage)}
                     <button
                         class="btn btn-sm text-success py-0 px-2 me-1 add-btn opacity-0"

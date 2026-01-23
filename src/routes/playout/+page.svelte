@@ -1,10 +1,10 @@
 <script>
     import { onMount } from "svelte";
-    import FileExplorer from "$lib/components/Playout/FileExplorer.svelte";
-    import Playlist from "$lib/components/Playout/Playlist.svelte";
-    import Controls from "$lib/components/Playout/Controls.svelte";
-    import Preview from "../Preview.svelte";
-    import { initWebSocket } from "$lib/obs_store";
+    import FileExplorer from "$lib/components/playout/FileExplorer.svelte";
+    import Playlist from "$lib/components/playout/Playlist.svelte";
+    import Controls from "$lib/components/playout/Controls.svelte";
+    import Preview from "$lib/components/common/Preview.svelte";
+    import { initWebSocket } from "$lib/stores/obs.js";
 
     onMount(() => {
         initWebSocket();

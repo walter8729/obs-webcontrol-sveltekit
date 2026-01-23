@@ -1,18 +1,18 @@
 <script>
     import { onMount } from "svelte";
-    import Zocalos from "./Zocalos.svelte";
-    import Log from "./Log.svelte";
-    import Preview from "./Preview.svelte";
-    import SceneSelector from "./SceneSelector.svelte";
-    import SceneItemSelector from "./SceneItemSelector.svelte";
-    import InfoPill from "./InfoPill.svelte";
-    import Playlist from "$lib/components/Playout/Playlist.svelte";
-    import Controls from "$lib/components/Playout/Controls.svelte";
+    import Zocalos from "$lib/components/zocalos/Zocalos.svelte";
+    import LoginPortal from "$lib/components/common/LoginPortal.svelte";
+    import Preview from "$lib/components/common/Preview.svelte";
+    import SceneSelector from "$lib/components/common/SceneSelector.svelte";
+    import SceneItemSelector from "$lib/components/common/SceneItemSelector.svelte";
+    import InfoPill from "$lib/components/common/InfoPill.svelte";
+    import Playlist from "$lib/components/playout/Playlist.svelte";
+    import Controls from "$lib/components/playout/Controls.svelte";
     import {
         obsState,
         obsConnected,
         sendCommand as wsSendCommand,
-    } from "$lib/obs_store";
+    } from "$lib/stores/obs.js";
 
     // states from store
     $: connected = $obsConnected;
@@ -44,8 +44,8 @@
     }
 </script>
 
-{#if logged}
-    <Log bind:logged />
+{#if !logged}
+    <LoginPortal bind:logged />
 {:else}
     <div class="container-fluid pt-1 justify-content-start">
         <div class="row sticky-top">

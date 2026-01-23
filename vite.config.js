@@ -16,10 +16,10 @@ const webSocketServer = {
     // for the OBS logic to use. For now, just initialize it.
     globalThis.io = io;
 
-    // Dynamically import the obs_server to initialize it
-    import('./src/lib/server/obs_server.js').then(({ initWS }) => {
+    // Importar dinámicamente el servidor OBS para inicializarlo
+    import('./src/lib/server/obs.js').then(({ initWS }) => {
       initWS(io);
-      console.log('OBS Server initialized and attached to WebSocket');
+      console.log('Servidor OBS inicializado y vinculado al WebSocket');
     });
 
     console.log('Socket.io server initialized');

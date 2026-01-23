@@ -1,86 +1,104 @@
 <script>
+    /**
+     * @file Controls.svelte
+     * @description Componente de controles principales del sistema de playout.
+     * Incluye botones de transporte (play, pause, stop, etc.), barra de progreso,
+     * control de velocidad y configuración de bucles A-B.
+     */
     import { onMount, onDestroy } from "svelte";
-    import { playoutStore, currentMedia, nextMedia } from "$lib/playoutStore";
-    import { sendCommand } from "$lib/obs_store";
+    import {
+        playoutStore,
+        currentMedia,
+        nextMedia,
+    } from "../../stores/playout.js";
+    import { formatTime } from "../../utils/formatters.js";
 
+    // Suscripción reactiva al estado del playout
     $: status = $playoutStore.status;
     $: playlist = $playoutStore.playlist;
 
-    // Auto-Next and settings from store
+    // Configuraciones reactivas vinculadas al store
     $: autoNext = $playoutStore.autoNext;
     $: loopList = $playoutStore.loopList;
     $: loopFile = $playoutStore.loopFile;
     $: stopAfterCurrent = $playoutStore.stopAfterCurrent;
     $: loopAB = $playoutStore.loopAB;
 
+    /** @type {number} Velocidad actual seleccionada localmente en el slider */
     let localSpeed = 100;
+
+    /** @type {boolean} Flag para evitar que el slider "tiemble" mientras el usuario lo arrastra */
     let isDraggingSpeed = false;
 
-    // Sync from store only when NOT dragging
+    // Sincronizar la velocidad local con la del store solo cuando el usuario no está arrastrando el slider
     $: {
         if (!isDraggingSpeed) {
             localSpeed = $playoutStore.speed;
         }
     }
 
-    function formatTime(ms) {
-        if (!ms) return "00:00";
-        const secTotal = Math.floor(ms / 1000);
-        const days = Math.floor(secTotal / 86400);
-        const hours = Math.floor((secTotal % 86400) / 3600);
-        const mins = Math.floor((secTotal % 3600) / 60);
-        const secs = secTotal % 60;
+    /** @type {number} Almacena el tiempo actual del clip cuando se inicia el cambio de velocidad */
+    let speedCaptureTime = 0;
 
-        const hms = `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-
-        if (days > 0) return `${days}d ${hms}`;
-        if (hours > 0) return hms;
-        return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-
+    // Lógica de cálculo de progreso y tiempo restante
     $: progress =
         status.durationMs > 0
             ? (status.currentMs / status.durationMs) * 100
             : 0;
     $: remainingMs = status.durationMs - status.currentMs;
 
+    /**
+     * Ejecuta una acción de transporte genérica (PLAY, PAUSE, STOP, RESTART).
+     * @param {string} action Nombre de la acción.
+     */
     function handleAction(action) {
         playoutStore.playoutAction(action);
     }
 
+    /**
+     * Gestiona el salto directo a un punto del video (seek) desde la barra de progreso.
+     * @param {Event} e Evento de input del range.
+     */
     function handleSeek(e) {
         const val = parseFloat(e.target.value);
         const ms = Math.floor((val / 100) * status.durationMs);
         playoutStore.playoutSeek(ms);
     }
 
-    // Speed Slider Logic - Restarting from zero
+    /** Captura el tiempo actual al pulsar el slider de velocidad para mantener la posición */
     function onSpeedPointerDown() {
         isDraggingSpeed = true;
+        speedCaptureTime = status.currentMs;
     }
 
+    /** Al soltar el slider, envía la nueva velocidad y el tiempo capturado al servidor */
     function onSpeedPointerUp() {
         isDraggingSpeed = false;
-        playoutStore.setSpeed(localSpeed);
+        playoutStore.setSpeed(localSpeed, speedCaptureTime);
     }
 
+    /** Actualización visual inmediata del valor de velocidad */
     function onSpeedInputChange(e) {
         localSpeed = parseInt(e.target.value);
     }
 
+    /** Resetea la velocidad al 100% (original) sin perder la posición de reproducción */
     function resetSpeed() {
         localSpeed = 100;
-        playoutStore.setSpeed(100);
+        playoutStore.setSpeed(100, status.currentMs);
     }
 
+    /** Alterna configuraciones booleanas como AutoNext o LoopFile */
     function toggleSetting(key) {
         playoutStore.updateSetting(key, !$playoutStore[key]);
     }
 
+    /** Activa o desactiva el bucle entre puntos A y B */
     function toggleLoopAB() {
         playoutStore.setLoopAB({ ...loopAB, active: !loopAB.active });
     }
 
+    /** Establece el punto de inicio (A) o fin (B) del bucle en el segundo actual */
     function setPoint(type) {
         if (type === "A") {
             playoutStore.setLoopAB({ ...loopAB, start: status.currentMs });
@@ -89,6 +107,7 @@
         }
     }
 
+    /** Salta al clip anterior en la lista de reproducción */
     function handlePrev() {
         const idx = playlist.findIndex((i) => i.status === "playing");
         if (idx > 0) {
@@ -98,6 +117,7 @@
         }
     }
 
+    /** Salta al siguiente clip en la lista de reproducción */
     function handleNext() {
         const idx = playlist.findIndex((i) => i.status === "playing");
         if (idx !== -1 && idx < playlist.length - 1) {
@@ -107,10 +127,21 @@
         }
     }
 
+    /**
+     * Limpia el nombre del estado de OBS para mostrar algo más amigable en UI.
+     * @param {string} state Estado crudo de OBS.
+     */
     function getSimpleState(state) {
         if (!state) return "IDLE";
         const s = state.replace("OBS_MEDIA_STATE_", "");
         return s === "OBS_MEDIA_STATE_ENDED" ? "ENDED" : s;
+    }
+
+    // Resetear slider local al 100% cuando cambia el clip (lógica automática)
+    let lastMediaId = null;
+    $: if ($currentMedia?.id !== lastMediaId) {
+        lastMediaId = $currentMedia?.id;
+        localSpeed = 100;
     }
 </script>
 
@@ -118,12 +149,14 @@
     class="card bg-dark text-white shadow-lg border-secondary main-controls-card"
 >
     <div class="card-body p-3">
-        <!-- Status Section -->
+        <!-- Sección de Estado Actual -->
         <div
             class="status-box mb-3 p-2 rounded border border-secondary bg-black"
         >
             <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="small text-muted fw-bold">STATUS</span>
+                <span class="small text-muted fw-bold"
+                    >ESTADO DE REPRODUCCIÓN</span
+                >
                 <span
                     class="badge {status.state === 'OBS_MEDIA_STATE_PLAYING'
                         ? 'bg-primary'
@@ -134,13 +167,15 @@
             </div>
             <div class="item-info">
                 <div class="d-flex gap-2 align-items-baseline">
-                    <span class="small text-info text-nowrap">PLAYING:</span>
+                    <span class="small text-info text-nowrap">AL AIRE:</span>
                     <span class="text-white-50 text-truncate fw-bold"
                         >{$currentMedia?.name || "---"}</span
                     >
                 </div>
                 <div class="d-flex gap-2 align-items-baseline">
-                    <span class="small text-warning text-nowrap">NEXT:</span>
+                    <span class="small text-warning text-nowrap"
+                        >SIGUIENTE:</span
+                    >
                     <span class="text-white-50 text-truncate"
                         >{$nextMedia?.name || "---"}</span
                     >
@@ -148,7 +183,7 @@
             </div>
         </div>
 
-        <!-- Progress Bar -->
+        <!-- Barra de Progreso del Clip -->
         <div class="progress-section mb-1 mt-3">
             <input
                 type="range"
@@ -161,32 +196,33 @@
             />
         </div>
 
+        <!-- Etiquetas de Tiempo -->
         <div
             class="d-flex justify-content-between small font-monospace mb-4 time-labels"
         >
             <div class="d-flex flex-column">
-                <span class="text-muted tiny-label">ELAPSED</span>
+                <span class="text-muted tiny-label">TRANSCURRIDO</span>
                 <span class="text-success">{formatTime(status.currentMs)}</span>
             </div>
             <div class="d-flex flex-column text-center">
-                <span class="text-muted tiny-label">REMAINING</span>
+                <span class="text-muted tiny-label">RESTANTE</span>
                 <span class="text-warning">-{formatTime(remainingMs)}</span>
             </div>
             <div class="d-flex flex-column text-end">
-                <span class="text-muted tiny-label">TOTAL</span>
+                <span class="text-muted tiny-label">DURACIÓN TOTAL</span>
                 <span class="text-info">{formatTime(status.durationMs)}</span>
             </div>
         </div>
 
-        <!-- Transport Controls -->
+        <!-- Controles de Transporte (PREV, PLAY/PAUSE, NEXT) -->
         <div class="transport-grid mb-3">
             <button
                 class="btn btn-dark border-secondary transport-btn"
                 on:click={handlePrev}
-                title="Previous"
+                title="Anterior"
             >
                 <i class="bi bi-skip-start-fill"></i>
-                <span class="btn-text">PREV</span>
+                <span class="btn-text">ANTERIOR</span>
             </button>
             <div class="play-pause-group">
                 {#if status.state === "OBS_MEDIA_STATE_PLAYING"}
@@ -195,7 +231,7 @@
                         on:click={() => handleAction("PAUSE")}
                     >
                         <i class="bi bi-pause-fill"></i>
-                        <span class="btn-text">PAUSE</span>
+                        <span class="btn-text">PAUSA</span>
                     </button>
                 {:else}
                     <button
@@ -210,13 +246,14 @@
             <button
                 class="btn btn-dark border-secondary transport-btn"
                 on:click={handleNext}
-                title="Next"
+                title="Siguiente"
             >
                 <i class="bi bi-skip-end-fill"></i>
-                <span class="btn-text">NEXT</span>
+                <span class="btn-text">SIGUIENTE</span>
             </button>
         </div>
 
+        <!-- Botones de Acción Secundaria (STOP, RESTART) -->
         <div class="row g-2 mb-4">
             <div class="col-6">
                 <button
@@ -231,12 +268,12 @@
                     class="btn btn-outline-info btn-sm w-100 d-flex align-items-center justify-content-center gap-2"
                     on:click={() => handleAction("RESTART")}
                 >
-                    <i class="bi bi-arrow-counterclockwise"></i> RESTART
+                    <i class="bi bi-arrow-counterclockwise"></i> REINICIAR
                 </button>
             </div>
         </div>
 
-        <!-- Automation Switches -->
+        <!-- Opciones de Automatización -->
         <div class="row g-2 mb-4">
             <div class="col-6">
                 <button
@@ -245,7 +282,7 @@
                         : 'btn-outline-secondary'} text-uppercase tiny-font"
                     on:click={() => toggleSetting("stopAfterCurrent")}
                 >
-                    Stop After Current
+                    Detener tras actual
                 </button>
             </div>
             <div class="col-6">
@@ -255,24 +292,24 @@
                         : 'btn-outline-secondary'} text-uppercase tiny-font"
                     on:click={() => toggleSetting("autoNext")}
                 >
-                    Auto Next {autoNext ? "ON" : "OFF"}
+                    Auto Próximo {autoNext ? "SÍ" : "NO"}
                 </button>
             </div>
         </div>
 
-        <!-- Loop A-B Section -->
+        <!-- Sección de Bucle A-B -->
         <div
             class="loop-ab-section p-2 border border-secondary rounded mb-3 bg-black"
         >
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="tiny-font fw-bold text-muted">LOOP A-B</span>
+                <span class="tiny-font fw-bold text-muted">BUCLE A-B</span>
                 <button
                     class="btn btn-sm {loopAB?.active
                         ? 'btn-success'
                         : 'btn-outline-secondary'} py-0 px-2 tiny-font"
                     on:click={toggleLoopAB}
                 >
-                    {loopAB?.active ? "ON" : "OFF"}
+                    {loopAB?.active ? "ACTIVO" : "INACTIVO"}
                 </button>
             </div>
             <div class="row g-1">
@@ -295,12 +332,14 @@
             </div>
         </div>
 
-        <!-- Speed Section -->
+        <!-- Control de Velocidad -->
         <div
             class="speed-section p-2 border border-secondary rounded mb-3 bg-black"
         >
             <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="tiny-font fw-bold text-muted">SPEED CONTROL</span>
+                <span class="tiny-font fw-bold text-muted"
+                    >CONTROL DE VELOCIDAD</span
+                >
                 <span class="badge bg-dark border border-secondary text-info"
                     >{localSpeed}%</span
                 >
@@ -324,15 +363,15 @@
                     style="left: 42.85%;"
                     on:click={resetSpeed}
                     on:keydown={(e) => e.key === "Enter" && resetSpeed()}
-                    title="Original Speed (100%)"
+                    title="Velocidad Original (100%)"
                 ></div>
             </div>
         </div>
 
-        <!-- Loop Options -->
+        <!-- Opciones de Bucle (Archivo / Lista) -->
         <div class="loop-section p-2 border border-secondary rounded bg-black">
             <span class="tiny-font fw-bold text-muted d-block mb-2"
-                >LOOP OPTIONS</span
+                >MODO DE REPETICIÓN</span
             >
             <div class="d-flex gap-2">
                 <button
@@ -341,7 +380,7 @@
                         : 'btn-outline-secondary'} tiny-font"
                     on:click={() => toggleSetting("loopFile")}
                 >
-                    LOOP FILE
+                    REPETIR CLIP
                 </button>
                 <button
                     class="btn btn-sm flex-grow-1 {loopList
@@ -349,7 +388,7 @@
                         : 'btn-outline-secondary'} tiny-font"
                     on:click={() => toggleSetting("loopList")}
                 >
-                    LOOP LIST
+                    REPETIR LISTA
                 </button>
             </div>
         </div>
