@@ -25,6 +25,9 @@ export function initWebSocket() {
     socket.on('state', (state) => {
         console.log('Received OBS state update:', state);
         obsState.set(state);
+        import('./playoutStore').then(m => {
+            m.playoutStore.syncWithServer(state);
+        });
     });
 
     socket.on('screenshot', (data) => {

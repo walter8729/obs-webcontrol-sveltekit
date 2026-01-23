@@ -66,6 +66,41 @@ db.run(`ALTER TABLE zocalosDinamicos ADD COLUMN program_id INTEGER DEFAULT 1`, (
 // Migración: Agregar slot a zocalosDinamicos si no existe
 db.run(`ALTER TABLE zocalosDinamicos ADD COLUMN slot INTEGER DEFAULT 1`, (err) => { });
 
+// --- PLAYOUT TABLES ---
+
+// Tabla de Playlist
+db.run(`CREATE TABLE IF NOT EXISTS playlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  path TEXT NOT NULL,
+  duration INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'idle', -- 'idle', 'playing', 'next'
+  sort_order INTEGER DEFAULT 0
+)`);
+
+// Tabla de Playout Settings
+db.run(`CREATE TABLE IF NOT EXISTS playout_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+)`, (err) => {
+  if (!err) {
+    // Default settings
+    const defaults = {
+      'autoNext': 'true',
+      'loopList': 'true',
+      'loopFile': 'false',
+      'stopAfterCurrent': 'false',
+      'speed': '100',
+      'loopABActive': 'false',
+      'loopABStart': '0',
+      'loopABEnd': '0'
+    };
+    Object.entries(defaults).forEach(([key, val]) => {
+      db.run('INSERT OR IGNORE INTO playout_settings (key, value) VALUES (?, ?)', [key, val]);
+    });
+  }
+});
+
 // Crear tabla de usuario si no existe
 db.run(`CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -300,6 +335,107 @@ export function getUser(username) {
     db.all('SELECT * FROM users WHERE username=?', [username], (err, rows) => {
       if (err) reject(err);
       resolve(rows);
+    });
+  });
+}
+// --- FUNCIONES PLAYOUT ---
+
+export function getPlaylist() {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM playlist ORDER BY sort_order ASC', (err, rows) => {
+      if (err) reject(err);
+      resolve(rows || []);
+    });
+  });
+}
+
+export function addToPlaylist(item) {
+  return new Promise((resolve, reject) => {
+    // Get max sort_order
+    db.get('SELECT MAX(sort_order) as maxOrder FROM playlist', (err, row) => {
+      const nextOrder = (row?.maxOrder || 0) + 1;
+      db.run('INSERT INTO playlist (name, path, duration, sort_order) VALUES (?, ?, ?, ?)',
+        [item.name, item.path, item.duration || 0, nextOrder], function (err) {
+          if (err) reject(err);
+          resolve(this.lastID);
+        });
+    });
+  });
+}
+
+export function removeFromPlaylist(id) {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM playlist WHERE id = ?', [id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+}
+
+export function clearPlaylist() {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM playlist', function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+}
+
+export function updatePlaylistSortOrder(id, order) {
+  return new Promise((resolve, reject) => {
+    db.run('UPDATE playlist SET sort_order = ? WHERE id = ?', [order, id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+}
+
+export function updatePlaylistItemStatus(id, status) {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      if (status === 'playing') {
+        // Only one can be playing
+        db.run("UPDATE playlist SET status = 'idle' WHERE status = 'playing'");
+      } else if (status === 'next') {
+        // Only one can be next
+        db.run("UPDATE playlist SET status = 'idle' WHERE status = 'next'");
+      }
+      db.run('UPDATE playlist SET status = ? WHERE id = ?', [status, id], function (err) {
+        if (err) reject(err);
+        resolve(this.changes);
+      });
+    });
+  });
+}
+
+export function setAllItemsIdle() {
+  return new Promise((resolve, reject) => {
+    db.run("UPDATE playlist SET status = 'idle'", function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+}
+
+export function getPlayoutSettings() {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM playout_settings', (err, rows) => {
+      if (err) reject(err);
+      const settings = {};
+      rows?.forEach(row => {
+        settings[row.key] = row.value === 'true' ? true : (row.value === 'false' ? false : row.value);
+      });
+      resolve(settings);
+    });
+  });
+}
+
+export function updatePlayoutSetting(key, value) {
+  return new Promise((resolve, reject) => {
+    const valStr = typeof value === 'boolean' ? String(value) : String(value);
+    db.run('INSERT OR REPLACE INTO playout_settings (key, value) VALUES (?, ?)', [key, valStr], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
     });
   });
 }

@@ -1,7 +1,11 @@
 import OBSWebSocket from 'obs-websocket-js';
 import { OBS_ADDRESS, OBS_PASSWORD } from '../config.js';
-import { getAllZocalos, setOnAirZocalo, addZocalo, deleteZocalo, updateZocalo, getAllPrograms, getActiveProgram, setActiveProgram, addProgram, deleteProgram, getZocaloDinamico, updateZocaloDinamico, getAllZocalosGlobal, getAllZocalosDinamicosGlobal, updateProgram, setOnAirAuxiliary } from '../../db.mjs';
+import { getAllZocalos, setOnAirZocalo, addZocalo, deleteZocalo, updateZocalo, getAllPrograms, getActiveProgram, setActiveProgram, addProgram, deleteProgram, getZocaloDinamico, updateZocaloDinamico, getAllZocalosGlobal, getAllZocalosDinamicosGlobal, updateProgram, setOnAirAuxiliary, getPlaylist, addToPlaylist, removeFromPlaylist, clearPlaylist, updatePlaylistSortOrder, updatePlaylistItemStatus, setAllItemsIdle, getPlayoutSettings, updatePlayoutSetting } from '../../db.mjs';
 import { readZocaloDinamicoFromFile, writeZocaloToFile, writeZocaloDinamicoToFile } from '../../file.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execPromise = promisify(exec);
 
 export const obs = new OBSWebSocket();
 let connected = false;
@@ -16,8 +20,33 @@ let state = {
     zocalos: [], // All zocalos
     zocalosDinamicos: [], // All F3s
     programs: [],
-    activeProgramId: 1
+    activeProgramId: 1,
+    playout: {
+        playlist: [],
+        settings: {},
+        status: {
+            currentMs: 0,
+            durationMs: 0,
+            state: 'IDLE',
+            file: ''
+        }
+    }
 };
+
+async function getMediaDuration(path) {
+    // Images default to 10s
+    const ext = path.split('.').pop().toLowerCase();
+    const imageExts = ['png', 'jpg', 'jpeg', 'bmp', 'tga', 'gif', 'webp', 'svg', 'tiff', 'tif', 'exr', 'hdr', 'psd', 'ico', 'pbm', 'pgm', 'ppm', 'xbm', 'xpm', 'dds'];
+    if (imageExts.includes(ext)) return 10;
+
+    try {
+        const { stdout } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${path}"`);
+        return parseFloat(stdout) || 0;
+    } catch (e) {
+        console.error('Error getting duration with ffprobe:', e.message);
+        return 0;
+    }
+}
 
 async function updateState() {
     try {
@@ -56,6 +85,10 @@ async function updateState() {
             state.programSceneItemList = [];
         }
 
+        // Fetch playout state
+        state.playout.playlist = await getPlaylist();
+        state.playout.settings = await getPlayoutSettings();
+
         broadcast('state', state);
     } catch (e) {
         console.error('Error updating state:', e.message);
@@ -75,8 +108,8 @@ async function startScreenshotLoop() {
             const data = await obs.call('GetSourceScreenshot', {
                 sourceName: state.programScene,
                 imageFormat: 'jpg',
-                imageWidth: 854,
-                imageHeight: 480,
+                imageWidth: 640,
+                imageHeight: 360,
                 imageCompressionQuality: -1
             });
             if (data && data.imageData) {
@@ -85,7 +118,7 @@ async function startScreenshotLoop() {
         } catch (e) {
             // Silently fail screenshots
         }
-    }, 1000);
+    }, 200);
 }
 
 async function startMediaStatusLoop() {
@@ -93,16 +126,94 @@ async function startMediaStatusLoop() {
         if (!connected) return;
         try {
             const status = await obs.call('GetMediaInputStatus', { inputName: 'playout' });
-            broadcast('playoutStatus', {
+
+            // Loop A-B enforcement (Server-side)
+            const settings = state.playout.settings;
+            if (settings &&
+                settings.loopABActive &&
+                status.mediaState === 'OBS_MEDIA_STATE_PLAYING' &&
+                status.mediaCursor >= Number(settings.loopABEnd) &&
+                Number(settings.loopABEnd) > Number(settings.loopABStart)
+            ) {
+                await obs.call('SetMediaInputCursor', {
+                    inputName: 'playout',
+                    mediaCursor: Number(settings.loopABStart)
+                });
+                // Update local status immediately for smoother UI
+                status.mediaCursor = Number(settings.loopABStart);
+            }
+
+            state.playout.status = {
                 currentMs: status.mediaCursor,
                 durationMs: status.mediaDuration,
                 state: status.mediaState,
-                file: '' // We could get this from settings if needed
-            });
+                file: ''
+            };
+            broadcast('playoutStatus', state.playout.status);
         } catch (e) {
-            // Probably source 'playout' doesn't exist yet or is not a media source
+            // Probably source 'playout' doesn't exist yet
         }
     }, 500);
+}
+
+async function handleAutoNext() {
+    if (!state.playout.settings.autoNext) return;
+
+    const playlist = state.playout.playlist;
+    const currentIndex = playlist.findIndex(item => item.status === 'playing');
+    const nextIndex = playlist.findIndex(item => item.status === 'next');
+
+    let toPlay = -1;
+
+    if (nextIndex !== -1) {
+        toPlay = nextIndex;
+    } else if (state.playout.settings.loopList && playlist.length > 0) {
+        toPlay = 0;
+    }
+
+    if (toPlay !== -1) {
+        const item = playlist[toPlay];
+        await playItem(item);
+    } else {
+        await obs.call('TriggerMediaInputAction', {
+            inputName: 'playout',
+            mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP'
+        });
+    }
+}
+
+async function playItem(item) {
+    if (!connected) return;
+
+    // Set file in OBS
+    await obs.call('SetInputSettings', {
+        inputName: 'playout',
+        inputSettings: { local_file: item.path, looping: state.playout.settings.loopFile },
+        overlay: true
+    });
+
+    // Explicitly trigger restart to ensure it plays from beginning
+    await obs.call('TriggerMediaInputAction', {
+        inputName: 'playout',
+        mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+    });
+
+    // Update DB statuses
+    await updatePlaylistItemStatus(item.id, 'playing');
+
+    // Determine next item
+    const playlist = await getPlaylist();
+    const idx = playlist.findIndex(i => i.id === item.id);
+    let nextIdx = idx + 1;
+    if (nextIdx >= playlist.length) {
+        nextIdx = state.playout.settings.loopList ? 0 : -1;
+    }
+
+    if (nextIdx !== -1) {
+        await updatePlaylistItemStatus(playlist[nextIdx].id, 'next');
+    }
+
+    await updateState();
 }
 
 if (!globalThis.screenshotLoopStarted) {
@@ -169,6 +280,14 @@ obs.on('Identified', () => {
     broadcast('connected', true);
     console.log('OBS Connected and Identified');
     updateState();
+});
+
+obs.removeAllListeners('MediaInputPlaybackEnded');
+obs.on('MediaInputPlaybackEnded', async (data) => {
+    if (data.inputName === 'playout') {
+        console.log('Playout media ended, handling auto-next...');
+        await handleAutoNext();
+    }
 });
 
 // Event Handlers
@@ -253,10 +372,33 @@ export async function initWS(io) {
                         await updateState();
                         break;
                     case 'playoutAction':
-                        await obs.call('TriggerMediaInputAction', {
-                            inputName: 'playout',
-                            mediaAction: `OBS_WEBSOCKET_MEDIA_INPUT_ACTION_${data.action}`
-                        });
+                        if (data.action === 'RESTART') {
+                            const currentItem = state.playout.playlist.find(i => i.status === 'playing');
+                            if (currentItem) {
+                                await playItem(currentItem);
+                            } else {
+                                // Fallback if no item marked as playing
+                                await obs.call('TriggerMediaInputAction', {
+                                    inputName: 'playout',
+                                    mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+                                });
+                            }
+                        } else if (data.action === 'PLAY' && (state.playout.status.state === 'OBS_MEDIA_STATE_ENDED' || state.playout.status.state === 'OBS_MEDIA_STATE_STOPPED')) {
+                            const currentItem = state.playout.playlist.find(i => i.status === 'playing');
+                            if (currentItem) {
+                                await playItem(currentItem);
+                            } else {
+                                await obs.call('TriggerMediaInputAction', {
+                                    inputName: 'playout',
+                                    mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY'
+                                });
+                            }
+                        } else {
+                            await obs.call('TriggerMediaInputAction', {
+                                inputName: 'playout',
+                                mediaAction: `OBS_WEBSOCKET_MEDIA_INPUT_ACTION_${data.action}`
+                            });
+                        }
                         break;
                     case 'playoutSeek':
                         await obs.call('SetMediaInputCursor', {
@@ -265,18 +407,102 @@ export async function initWS(io) {
                         });
                         break;
                     case 'playoutSetFile':
-                        await obs.call('SetInputSettings', {
-                            inputName: 'playout',
-                            inputSettings: { local_file: data.path },
-                            overlay: true
-                        });
+                        // If data.id is provided, we use the item from playlist
+                        if (data.id) {
+                            const item = state.playout.playlist.find(i => i.id === data.id);
+                            if (item) await playItem(item);
+                        } else if (data.path) {
+                            // Direct path play (not in playlist)
+                            await obs.call('SetInputSettings', {
+                                inputName: 'playout',
+                                inputSettings: { local_file: data.path },
+                                overlay: true
+                            });
+                        }
+                        break;
+                    case 'playoutSetNext':
+                        await updatePlaylistItemStatus(data.id, 'next');
+                        await updateState();
                         break;
                     case 'playoutSetSpeed':
-                        await obs.call('SetInputSettings', {
-                            inputName: 'playout',
-                            inputSettings: { speed_percent: data.speed },
-                            overlay: true
+                        try {
+                            const status = await obs.call('GetMediaInputStatus', { inputName: 'playout' });
+                            const currentCursor = status.mediaCursor;
+
+                            await obs.call('SetInputSettings', {
+                                inputName: 'playout',
+                                inputSettings: { speed_percent: data.speed },
+                                overlay: true
+                            });
+
+                            // Restore cursor to avoid starting from 0
+                            if (status.mediaState === 'OBS_MEDIA_STATE_PLAYING') {
+                                await obs.call('SetMediaInputCursor', {
+                                    inputName: 'playout',
+                                    mediaCursor: currentCursor
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Error updating speed:', e.message);
+                        }
+                        await updatePlayoutSetting('speed', data.speed);
+                        break;
+                    case 'playoutAddToPlaylist':
+                        const duration = await getMediaDuration(data.path);
+                        const newItemId = await addToPlaylist({
+                            name: data.name,
+                            path: data.path,
+                            duration: Math.round(duration * 1000) // to ms
                         });
+
+                        // If playlist was empty, mark as next
+                        const currentPlaylist = await getPlaylist();
+                        if (currentPlaylist.length === 1) {
+                            await updatePlaylistItemStatus(newItemId, 'next');
+                        }
+                        await updateState();
+                        break;
+                    case 'playoutRemoveFromPlaylist':
+                        await removeFromPlaylist(data.id);
+                        await updateState();
+                        break;
+                    case 'playoutClearPlaylist':
+                        await clearPlaylist();
+                        await updateState();
+                        break;
+                    case 'playoutUpdateSettings':
+                        await updatePlayoutSetting(data.key, data.value);
+
+                        // If loopFile changed, update OBS immediately
+                        if (data.key === 'loopFile') {
+                            await obs.call('SetInputSettings', {
+                                inputName: 'playout',
+                                inputSettings: { looping: data.value },
+                                overlay: true
+                            });
+                        }
+                        // If stopAfterCurrent turned ON, clear next
+                        if (data.key === 'stopAfterCurrent' && data.value === true) {
+                            await setAllItemsIdle(); // Or just clear 'next'
+                            // Re-set playing if any
+                            const playing = state.playout.playlist.find(i => i.status === 'playing');
+                            if (playing) await updatePlaylistItemStatus(playing.id, 'playing');
+                        }
+
+                        await updateState();
+                        break;
+                    case 'playoutSetLoopAB':
+                        await updatePlayoutSetting('loopABActive', data.active);
+                        await updatePlayoutSetting('loopABStart', data.start);
+                        await updatePlayoutSetting('loopABEnd', data.end);
+                        await updateState();
+                        break;
+                    case 'playoutReorder':
+                        // data.orders is an array of {id, sort_order}
+                        for (const item of data.orders) {
+                            await updatePlaylistSortOrder(item.id, item.sort_order);
+                        }
+                        await updateState();
                         break;
                 }
             } catch (e) {

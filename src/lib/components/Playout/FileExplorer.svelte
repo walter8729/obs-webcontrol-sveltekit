@@ -21,6 +21,11 @@
             items = data.items;
             currentDir = data.currentDir;
             parentDir = data.parentDir;
+
+            // Persist current directory
+            if (typeof window !== "undefined") {
+                localStorage.setItem("playout_explorer_dir", currentDir);
+            }
         } catch (e) {
             error = e.message;
         } finally {
@@ -29,44 +34,62 @@
     }
 
     function addToPlaylist(item) {
-        if (!item.isDirectory && item.isVideo) {
+        if (
+            !item.isDirectory &&
+            (item.isVideo || item.isAudio || item.isImage)
+        ) {
             playoutStore.addToFileList(item);
         }
     }
 
+    function handleDragStart(e, item) {
+        if (item.isDirectory) return;
+        e.dataTransfer.setData("text/plain", JSON.stringify(item));
+        e.dataTransfer.effectAllowed = "copy";
+    }
+
     onMount(() => {
+        const savedDir = localStorage.getItem("playout_explorer_dir");
+        if (savedDir) {
+            currentDir = savedDir;
+        }
         loadDir(currentDir);
     });
 </script>
 
-<div class="file-explorer card bg-dark text-white h-100">
+<div
+    class="file-explorer card bg-dark text-white h-100 border-secondary shadow-lg"
+>
     <div
-        class="card-header d-flex justify-content-between align-items-center py-2"
+        class="card-header d-flex justify-content-between align-items-center py-2 bg-dark"
     >
-        <h6 class="mb-0">EXPLORADOR</h6>
-        <button
-            class="btn btn-sm btn-outline-light"
-            on:click={() => loadDir(currentDir)}
-            title="Actualizar"
-        >
-            🔄
-        </button>
+        <h6 class="mb-0 text-light fw-bold small uppercase">EXPLORADOR</h6>
+        <div class="d-flex gap-1">
+            <button
+                class="btn btn-sm btn-outline-info py-0 px-2"
+                on:click={() => loadDir(currentDir)}
+                title="Actualizar"
+            >
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
     </div>
 
-    <div class="path-bar p-2 bg-secondary text-truncate small">
+    <div class="path-bar p-2 text-truncate small">
+        <span class="text-muted">DIR:</span>
         {currentDir}
     </div>
 
     <div
-        class="list-group list-group-flush overflow-auto flex-grow-1"
-        style="max-height: 400px;"
+        class="list-group list-group-flush overflow-auto flex-grow-1 explorer-body"
+        style="max-height: 500px;"
     >
         {#if parentDir && parentDir !== currentDir}
             <button
-                class="list-group-item list-group-item-action bg-dark text-info py-1 small"
+                class="list-group-item list-group-item-action bg-dark text-info py-1 small border-secondary d-flex align-items-center"
                 on:click={() => loadDir(parentDir)}
             >
-                📁 .. (Subir)
+                <i class="bi bi-folder-symlink me-2"></i> .. (Subir)
             </button>
         {/if}
 
@@ -85,29 +108,48 @@
 
         {#each items as item}
             <div
-                class="list-group-item list-group-item-action bg-dark text-white p-0 d-flex align-items-center"
+                class="list-group-item list-group-item-action bg-dark p-0 d-flex align-items-center border-secondary item-row"
+                draggable={!item.isDirectory}
+                on:dragstart={(e) => handleDragStart(e, item)}
+                on:dblclick={() =>
+                    item.isDirectory ? loadDir(item.path) : addToPlaylist(item)}
             >
                 <button
-                    class="btn btn-link text-decoration-none text-start flex-grow-1 py-1 px-2 small {item.isDirectory
+                    class="btn btn-link text-decoration-none text-start flex-grow-1 py-2 px-2 small d-flex align-items-center {item.isDirectory
                         ? 'text-warning'
-                        : item.isVideo
+                        : item.isVideo || item.isAudio || item.isImage
                           ? 'text-light'
                           : 'text-muted'}"
                     on:click={() =>
                         item.isDirectory ? loadDir(item.path) : null}
-                    disabled={!item.isDirectory && !item.isVideo}
+                    disabled={!item.isDirectory &&
+                        !item.isVideo &&
+                        !item.isAudio &&
+                        !item.isImage}
                 >
-                    {item.isDirectory ? "📁" : "📄"}
-                    {item.name}
+                    <span class="me-2">
+                        {#if item.isDirectory}
+                            <i class="bi bi-folder-fill"></i>
+                        {:else if item.isVideo}
+                            <i class="bi bi-play-btn-fill"></i>
+                        {:else if item.isAudio}
+                            <i class="bi bi-music-note-beamed"></i>
+                        {:else if item.isImage}
+                            <i class="bi bi-image"></i>
+                        {:else}
+                            <i class="bi bi-file-earmark"></i>
+                        {/if}
+                    </span>
+                    <span class="text-truncate file-name">{item.name}</span>
                 </button>
 
-                {#if item.isVideo}
+                {#if !item.isDirectory && (item.isVideo || item.isAudio || item.isImage)}
                     <button
-                        class="btn btn-sm btn-success py-0 px-2 me-1"
+                        class="btn btn-sm text-success py-0 px-2 me-1 add-btn opacity-0"
                         on:click={() => addToPlaylist(item)}
                         title="Agregar a Playlist"
                     >
-                        +
+                        <i class="bi bi-plus-circle-fill"></i>
                     </button>
                 {/if}
             </div>
@@ -117,13 +159,44 @@
 
 <style>
     .file-explorer {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        user-select: none;
     }
-    .list-group-item:hover {
-        background-color: #3d3d3d !important;
+    .explorer-body::-webkit-scrollbar {
+        width: 6px;
+    }
+    .explorer-body::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 3px;
+    }
+    .item-row {
+        cursor: default;
+        transition: background-color 0.2s;
+    }
+    .item-row:hover {
+        background-color: #2a2a2a !important;
+    }
+    .item-row:hover .add-btn {
+        opacity: 0.8 !important;
+    }
+    .add-btn:hover {
+        opacity: 1 !important;
+        transform: scale(1.1);
     }
     .path-bar {
-        font-family: monospace;
-        background-color: #1a1a1a !important;
+        font-family: "Consolas", monospace;
+        background-color: #000 !important;
+        border-bottom: 1px solid #333;
+        font-size: 0.75rem;
+    }
+    .file-name {
+        max-width: 180px;
+    }
+    .btn-link {
+        box-shadow: none;
+        border: none;
+    }
+    .uppercase {
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
 </style>

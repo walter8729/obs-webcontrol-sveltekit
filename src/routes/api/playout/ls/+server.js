@@ -17,7 +17,9 @@ export async function GET({ url }) {
 
         const items = fs.readdirSync(dir, { withFileTypes: true });
 
-        const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.mp3', '.wav', '.flv', '.ts', '.m2ts'];
+        const videoExts = ['.mp4', '.mkv', '.mov', '.webm', '.flv', '.ts', '.m2ts', '.m4v', '.avi', '.wmv', '.ogv', '.vob', '.3gp', '.f4v', '.mxf', '.mpg', '.mpeg', '.m2t', '.dv', '.dvcpro', '.asf', '.rm', '.vtt'];
+        const audioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.flac', '.aiff', '.aif', '.wma', '.mka', '.bwf', '.caf', '.m4b', '.m4r', '.mp2', '.mpa'];
+        const imageExts = ['.png', '.jpg', '.jpeg', '.bmp', '.tga', '.gif', '.webp', '.svg', '.tiff', '.tif', '.exr', '.hdr', '.psd', '.ico', '.pbm', '.pgm', '.ppm', '.xbm', '.xpm', '.dds'];
 
         const result = items.map(item => {
             const fullPath = path.join(dir, item.name);
@@ -29,12 +31,19 @@ export async function GET({ url }) {
                 path: fullPath,
                 isDirectory,
                 extension: isDirectory ? '' : ext,
-                isVideo: !isDirectory && videoExtensions.includes(ext)
+                isVideo: !isDirectory && videoExts.includes(ext),
+                isAudio: !isDirectory && audioExts.includes(ext),
+                isImage: !isDirectory && imageExts.includes(ext)
             };
         });
 
+        // Filter out items that are not directories and not supported media
+        const filteredResult = result.filter(item =>
+            item.isDirectory || item.isVideo || item.isAudio || item.isImage
+        );
+
         // Sort: Directories first, then files
-        result.sort((a, b) => {
+        filteredResult.sort((a, b) => {
             if (a.isDirectory && !b.isDirectory) return -1;
             if (!a.isDirectory && b.isDirectory) return 1;
             return a.name.localeCompare(b.name);
@@ -43,7 +52,7 @@ export async function GET({ url }) {
         return json({
             currentDir: dir,
             parentDir: path.dirname(dir),
-            items: result
+            items: filteredResult
         });
     } catch (error) {
         console.error('Error reading directory:', error);

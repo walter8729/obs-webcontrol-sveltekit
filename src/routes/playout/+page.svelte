@@ -3,6 +3,7 @@
     import FileExplorer from "$lib/components/Playout/FileExplorer.svelte";
     import Playlist from "$lib/components/Playout/Playlist.svelte";
     import Controls from "$lib/components/Playout/Controls.svelte";
+    import Preview from "../Preview.svelte";
     import { initWebSocket } from "$lib/obs_store";
 
     onMount(() => {
@@ -29,6 +30,9 @@
         <!-- Controls and Preview Area -->
         <div class="col-md-4">
             <div class="sticky-top" style="top: 1rem;">
+                <div class="mb-3">
+                    <Preview />
+                </div>
                 <Controls />
 
                 <!-- Quick Info / Help -->

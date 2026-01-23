@@ -201,7 +201,7 @@
                     <div class="text-end">
                         {#if Number(editingProgramId) === Number(activeProgramId)}
                             <span
-                                class="badge bg-danger blink fs-6 border border-light"
+                                class="badge bg-danger blink border border-light"
                             >
                                 ESTA AL AIRE: {activeProgramName}
                             </span>
@@ -419,11 +419,21 @@
         font-weight: bold;
     }
     .blink {
-        animation: blink-animation 1s steps(5, start) infinite;
+        animation: smooth-blink 3s ease-in-out infinite;
     }
-    @keyframes blink-animation {
-        to {
-            visibility: hidden;
+
+    @keyframes smooth-blink {
+        0% {
+            opacity: 0;
+        }
+        10% {
+            opacity: 1;
+        }
+        80% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
         }
     }
     .zocalos-list::-webkit-scrollbar {
