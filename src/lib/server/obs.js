@@ -235,13 +235,13 @@ async function playItem(item) {
     // Importante: Resetear bandera de stop manual al iniciar nueva reproducción
     manualStop = false;
 
-    // Configurar archivo en OBS - Siempre reseteamos velocidad a 100% para clips nuevos
+    // Configurar archivo en OBS - Mantenemos la velocidad actual
     await obs.call('SetInputSettings', {
         inputName: 'playout',
         inputSettings: {
             local_file: item.path,
             looping: state.playout.settings.loopFile,
-            speed_percent: 100
+            speed_percent: state.playout.settings.speed || 100
         },
         overlay: true
     });
@@ -254,8 +254,6 @@ async function playItem(item) {
 
     // Actualizar estados en BD
     await updatePlaylistItemStatus(item.id, 'playing');
-    await updatePlayoutSetting('speed', 100);
-    state.playout.settings.speed = 100;
 
     // Identificar el siguiente clip para pre-marcarlo en UI
     const playlist = await getPlaylist();
@@ -520,7 +518,6 @@ export async function initWS(io) {
                                 overlay: true
                             });
 
-                            // Restaurar el cursor inmediatamente después de cambiar la velocidad
                             await obs.call('SetMediaInputCursor', {
                                 inputName: 'playout',
                                 mediaCursor: targetCursor
@@ -528,9 +525,12 @@ export async function initWS(io) {
                         } catch (e) {
                             console.error('Error al actualizar velocidad:', e.message);
                         }
+
+
                         await updatePlayoutSetting('speed', data.speed);
                         // Asegurar sincronización del estado interno
                         state.playout.settings.speed = data.speed;
+                        await updateState();
                         break;
                     case 'playoutAddToPlaylist':
                         const duration = await getMediaDuration(data.path);

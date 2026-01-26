@@ -2,7 +2,7 @@ import { handler } from './build/handler.js';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { initWS, connectOBS } from './src/lib/server/obs_server.js';
+import { initWS, connectOBS } from './src/lib/server/obs.js';
 
 const port = process.env.PORT || 5000;
 const app = express();
@@ -16,7 +16,7 @@ const io = new Server(server, {
     }
 });
 
-// Attach to globalThis for obs_server.js
+// Attach to globalThis for obs.js
 globalThis.io = io;
 
 // Initialize OBS and WebSocket logic from the shared module

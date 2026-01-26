@@ -136,6 +136,7 @@ function createPlayoutStore() {
          * @param {number|null} seekMs Opcional: tiempo al que saltar tras cambiar la velocidad.
          */
         setSpeed: (speed, seekMs = null) => {
+            update(s => ({ ...s, speed: speed }));
             sendCommand('playoutSetSpeed', { speed, seekMs });
         }
     };

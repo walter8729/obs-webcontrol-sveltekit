@@ -136,13 +136,6 @@
         const s = state.replace("OBS_MEDIA_STATE_", "");
         return s === "OBS_MEDIA_STATE_ENDED" ? "ENDED" : s;
     }
-
-    // Resetear slider local al 100% cuando cambia el clip (lógica automática)
-    let lastMediaId = null;
-    $: if ($currentMedia?.id !== lastMediaId) {
-        lastMediaId = $currentMedia?.id;
-        localSpeed = 100;
-    }
 </script>
 
 <div
