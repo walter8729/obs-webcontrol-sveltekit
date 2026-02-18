@@ -7,18 +7,17 @@
     import SceneItemSelector from "$lib/components/common/SceneItemSelector.svelte";
     import InfoPill from "$lib/components/common/InfoPill.svelte";
     import Playlist from "$lib/components/playout/Playlist.svelte";
-    import Controls from "$lib/components/playout/Controls.svelte";
+    import ControlsMini from "$lib/components/playout/ControlsMini.svelte";
     import {
         obsState,
         obsConnected,
         sendCommand as wsSendCommand,
     } from "$lib/stores/obs.js";
 
-    // states from store
-    $: connected = $obsConnected;
+    import { page } from "$app/stores";
 
-    // variables for zocalos
-    $: logged = false;
+    $: connected = $obsConnected;
+    $: logged = !!$page.data.user;
     $: infoPillData = { type: "info", text: "" };
 
     onMount(async () => {
@@ -45,7 +44,7 @@
 </script>
 
 {#if !logged}
-    <LoginPortal bind:logged />
+    <LoginPortal />
 {:else}
     <div class="container-fluid pt-1 justify-content-start">
         <div class="row sticky-top">
@@ -108,9 +107,9 @@
                                 >
                             </div>
                             <div class="card-body p-1">
-                                <Controls />
+                                <ControlsMini />
                                 <div
-                                    style="max-height: 300px; overflow-y: auto;"
+                                    style="max-height: 100dvh; overflow-y:auto;"
                                 >
                                     <Playlist />
                                 </div>

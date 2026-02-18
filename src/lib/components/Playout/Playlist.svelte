@@ -129,7 +129,7 @@
     <!-- Lista de elementos con scroll -->
     <div
         class="playlist-body overflow-auto flex-grow-1"
-        style="max-height: 500px;"
+        style="max-height: 100dvh;"
     >
         {#if playlist.length === 0}
             <div class="p-4 text-center text-muted italic">

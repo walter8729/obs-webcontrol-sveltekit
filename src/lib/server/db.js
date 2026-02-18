@@ -116,7 +116,16 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
     password TEXT NOT NULL 
-  )`);
+  )`, (err) => {
+        if (!err) {
+            // Asegurar que exista al menos el usuario admin inicial
+            db.get("SELECT count(*) as count FROM users", (err, row) => {
+                if (row && row.count === 0) {
+                    db.run("INSERT INTO users (username, password) VALUES ('admin', 'admin')");
+                }
+            });
+        }
+    });
 });
 
 // --- FUNCIONES DE GESTIÓN DE PROGRAMAS ---
@@ -388,9 +397,27 @@ export function getAllUsers() {
 
 export function getUser(username) {
     return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM users WHERE username=?', [username], (err, rows) => {
+        db.get('SELECT * FROM users WHERE username=?', [username], (err, row) => {
             if (err) reject(err);
-            resolve(rows);
+            resolve(row);
+        });
+    });
+}
+
+export function updateUser(id, username, password) {
+    return new Promise((resolve, reject) => {
+        db.run('UPDATE users SET username = ?, password = ? WHERE id = ?', [username, password, id], function (err) {
+            if (err) reject(err);
+            resolve(this.changes);
+        });
+    });
+}
+
+export function deleteUser(id) {
+    return new Promise((resolve, reject) => {
+        db.run('DELETE FROM users WHERE id = ?', [id], function (err) {
+            if (err) reject(err);
+            resolve(this.changes);
         });
     });
 }

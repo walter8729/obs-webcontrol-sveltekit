@@ -157,7 +157,7 @@ async function startScreenshotLoop() {
                 broadcast('screenshot', data.imageData);
             }
         } catch (e) { }
-    }, 200);
+    }, 1000);
 }
 
 /**
@@ -589,7 +589,11 @@ export async function initWS(io) {
             }
         });
     });
+    // Carga inicial de datos al inicializar el WebSocket para asegurar que el primer cliente reciba la info
+    await updateState();
 }
 
 // Conexión inicial al arrancar el servidor
 connectOBS();
+// Asegurar que el estado inicial se cargue desde la BD aunque OBS no esté conectado
+updateState();

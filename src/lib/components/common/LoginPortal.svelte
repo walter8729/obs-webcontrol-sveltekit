@@ -6,22 +6,30 @@
      * información introductoria sobre las capacidades del sistema.
      */
 
-    /** @type {string} Nombre de usuario ingresado */
-    export let userName;
-    /** @type {string} Contraseña ingresada */
-    export let userPassword;
-    /** @type {boolean} Estado de autenticación controlado por el padre */
-    export let logged;
+    import { invalidateAll } from "$app/navigation";
+
+    let userName = "";
+    let userPassword = "";
 
     /**
-     * Valida las credenciales contra valores estáticos.
+     * Valida las credenciales contra el servidor.
      */
-    function login() {
-        if (userName === `demo` && userPassword === `demo`) {
-            logged = true;
-            console.log(`Sesión iniciada correctamente.`);
+    async function login() {
+        const res = await fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: userName,
+                password: userPassword,
+            }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            await invalidateAll();
         } else {
-            alert("Credenciales incorrectas (demo/demo)");
+            alert(data.message || "Credenciales incorrectas");
         }
     }
 </script>

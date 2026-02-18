@@ -114,7 +114,7 @@
     <!-- Cuerpo del explorador con scroll -->
     <div
         class="list-group list-group-flush overflow-auto flex-grow-1 explorer-body"
-        style="max-height: 500px;"
+        style="max-height: 100dvh;"
     >
         {#if parentDir && parentDir !== currentDir}
             <button

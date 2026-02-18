@@ -46,7 +46,7 @@
 </div>
 
 <style>
-    .accordion-button::after {
+    .dropdown-toggle::after {
         filter: invert(1);
     }
 </style>
